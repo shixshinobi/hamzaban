@@ -2,4 +2,7 @@ packages: []
 
 allowBuilds:
   esbuild: true
+  electron: true
   msw: false
+  tesseract.js: false
+  electron-winstaller: false

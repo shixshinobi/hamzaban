@@ -1,0 +1,35 @@
+import { createWorker, type Worker } from "tesseract.js"
+import { findLanguage } from "@shared/languages"
+
+let worker: Worker | null = null
+let workerLangs = ""
+let progressCb: ((p: number) => void) | undefined
+
+function langsFor(source: string) {
+  const code = findLanguage(source)?.ocr
+  // Latin + Persian + Arabic covers most screenshots this app sees when the source is unknown.
+  const set = new Set(["eng", "fas", "ara"])
+  if (code) set.add(code)
+  return [...set].join("+")
+}
+
+/** Recognise text in an image (data URL or canvas) with Tesseract running locally. */
+export async function recognize(
+  image: string | HTMLCanvasElement,
+  source = "auto",
+  onProgress?: (p: number) => void
+): Promise<string> {
+  const langs = langsFor(source)
+  progressCb = onProgress
+  if (!worker || workerLangs !== langs) {
+    await worker?.terminate()
+    worker = await createWorker(langs, 1, {
+      logger: (m: { status: string; progress: number }) => {
+        if (m.status === "recognizing text") progressCb?.(m.progress)
+      },
+    })
+    workerLangs = langs
+  }
+  const { data } = await worker.recognize(image)
+  return data.text.replace(/\n{3,}/g, "\n\n").trim()
+}

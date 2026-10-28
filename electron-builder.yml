@@ -1,0 +1,47 @@
+appId: app.hamzaban
+productName: Hamzaban
+copyright: Copyright © 2026 Shahabedin Mohamadi
+directories:
+  output: release/${version}
+  buildResources: build
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+extraResources:
+  - from: build
+    to: .
+    filter:
+      - "*.png"
+      - "*.ico"
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Hamzaban
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.productivity
+  icon: build/icon.png
+  extendInfo:
+    NSAppleEventsUsageDescription: Hamzaban sends Copy/Paste keystrokes to read and replace the selected text.
+    NSScreenCaptureUsageDescription: Hamzaban captures the region of the screen you select to translate it.
+    LSUIElement: false
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  icon: build/icon.png
+  synopsis: Liquid-glass desktop translator
+  executableName: hamzaban
