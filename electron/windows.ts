@@ -4,10 +4,12 @@ import {
   desktopCapturer,
   nativeTheme,
   screen,
+  shell,
   type BrowserWindowConstructorOptions,
 } from "electron"
 import os from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { profileInput } from "../shared/blocks"
 import type { Platform, PopupPayload, WindowMaterial } from "../shared/types"
 import { getSettings } from "./store"
@@ -49,7 +51,30 @@ function resolveMaterial(pref: WindowMaterial): Platform["material"] {
   return "none"
 }
 
+/** True for the app's own page (dev server or the bundled index.html), whatever the hash. */
+function isAppUrl(url: string) {
+  const dev = process.env.VITE_DEV_SERVER_URL
+  if (dev) return url.startsWith(dev)
+  return url.split("#")[0] === pathToFileURL(path.join(DIST, "index.html")).href
+}
+
+/**
+ * App windows carry the `hz` bridge, so they must never show anything but the app: a
+ * dropped file or a clicked link would otherwise load in the window with that bridge.
+ * Web links go to the user's browser instead.
+ */
 function load(win: BrowserWindow, route: string) {
+  const wc = win.webContents
+  wc.on("will-navigate", (e, url) => {
+    if (isAppUrl(url)) return
+    e.preventDefault()
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+  })
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+    return { action: "deny" }
+  })
+  wc.on("will-attach-webview", (e) => e.preventDefault())
   const dev = process.env.VITE_DEV_SERVER_URL
   if (dev) void win.loadURL(`${dev}#${route}`)
   else void win.loadFile(path.join(DIST, "index.html"), { hash: route })
@@ -64,7 +89,7 @@ function glass(kind: "main" | "popup"): BrowserWindowConstructorOptions {
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       spellcheck: false,
     },
   }
@@ -357,7 +382,7 @@ export async function startCapture() {
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
   })
   captureWin.setAlwaysOnTop(true, "screen-saver")

@@ -6,7 +6,7 @@ export const APP_VERSION = "0.1.0"
  */
 export const FEEDBACK = {
   /** Repository URL, e.g. https://github.com/<user>/hamzaban; issues open at /issues/new. */
-  github: "",
+  github: "https://github.com/shixshinobi/hamzaban",
   email: "mohamadishahabedin@gmail.com",
   /** Telegram username or group link, e.g. https://t.me/<name>. */
   telegram: "",
