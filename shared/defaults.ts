@@ -98,8 +98,8 @@ export const API_PRESETS: ApiPreset[] = [
     name: "Google Gemini",
     kind: "openai",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    // Google's flagship model; the dialog switches to the best one the key can reach.
-    model: "gemini-4-argon",
+    // Recommended for translation and usable on every key; the flagship needs billing.
+    model: "gemini-3.8-flash",
     keyUrl: "https://aistudio.google.com/apikey",
   },
   {
@@ -215,7 +215,11 @@ export const BUILTIN_STYLES: StyleProfile[] = [
     name: "فنی و نرم‌افزاری",
     description: "مستندات، رابط کاربری و متن‌های برنامه‌نویسی.",
     instructions:
-      "نام توابع، دستورها، مسیر فایل‌ها و بلوک‌های کد را ترجمه نکن. اصطلاحات فنی جاافتاده (مثل API، commit، deploy) را به همان شکل نگه دار. توضیح‌ها کوتاه و روشن باشند.",
+      "خواننده‌ی این متن برنامه‌نویس یا کاربر حرفه‌ای نرم‌افزار است.\n" +
+      "- نام محصول‌ها، ابزارها، کتابخانه‌ها، توابع، دستورها، متغیرها، مسیر فایل‌ها و بلوک‌های کد را دقیقاً به همان شکل انگلیسی بنویس (مثل Claude Code، npm install، CLAUDE.md) و آوانویسی فارسی نکن.\n" +
+      "- برای اصطلاحی که معادل فارسی جاافتاده دارد همان را به کار ببر (مخزن برای repository، شاخه برای branch، وابستگی برای dependency، پایگاه داده برای database). اگر برنامه‌نویس‌های فارسی‌زبان خود واژه‌ی انگلیسی را به کار می‌برند (API، commit، deploy، framework)، همان را با حروف لاتین بیاور.\n" +
+      "- هر اصطلاح را در سراسر متن یک‌جور ترجمه کن.\n" +
+      "- مثل یک نویسنده‌ی فنی فارسی‌زبان بنویس: روشن، دقیق و روان، بدون گرته‌برداری از ساختار جمله‌ی انگلیسی. چیزی اضافه یا کم نکن.",
     glossary: [],
     hue: 280,
     builtin: true,
@@ -242,10 +246,19 @@ export const DEFAULT_SHORTCUTS = {
   showMain: "CommandOrControl+Alt+H",
 }
 
-export const DEFAULT_SETTINGS: Settings = {
-  uiLanguage: "fa",
+/** Everything Settings → Appearance can reset. */
+export const APPEARANCE_DEFAULTS = {
   theme: "system",
   material: "auto",
+  accent: "blue",
+  backdrop: "aurora",
+  transparency: 50,
+  blur: 22,
+} satisfies Partial<Settings>
+
+export const DEFAULT_SETTINGS: Settings = {
+  uiLanguage: "fa",
+  ...APPEARANCE_DEFAULTS,
   sourceLang: "auto",
   targetLang: "fa",
   secondaryLang: "en",

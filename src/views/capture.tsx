@@ -2,6 +2,7 @@ import { ScanTextIcon } from "lucide-react"
 import { motion } from "motion/react"
 import { useEffect, useRef, useState } from "react"
 import { Kbd } from "@/components/ui/kbd"
+import { Spinner } from "@/components/ui/spinner"
 import { hz } from "@/lib/hz"
 import { useT } from "@/lib/i18n"
 
@@ -122,8 +123,12 @@ export function Capture() {
         animate={{ opacity: start ? 0 : 1, y: 0 }}
         className="glass glass-strong pointer-events-none absolute top-6 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full px-4 py-2 text-sm"
       >
-        <ScanTextIcon className="size-4 text-primary" />
-        <span>{t("captureHint")}</span>
+        {shot ? (
+          <ScanTextIcon className="size-4 text-primary" />
+        ) : (
+          <Spinner className="size-4 text-primary" />
+        )}
+        <span>{shot ? t("captureHint") : t("captureLoading")}</span>
         <Kbd>Esc</Kbd>
       </motion.div>
     </div>

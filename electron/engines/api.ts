@@ -1,5 +1,12 @@
-import { isGeminiApi } from "../../shared/models"
-import { EngineError, httpError, readLines, type EngineRunner } from "./types"
+import { isGeminiApi, translationModels } from "../../shared/models"
+import { log } from "../log"
+import {
+  EngineError,
+  httpError,
+  readLines,
+  type EngineContext,
+  type EngineRunner,
+} from "./types"
 
 function dataUrlParts(dataUrl: string) {
   const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl)
@@ -12,19 +19,139 @@ function netError(e: unknown, signal: AbortSignal): never {
   throw new EngineError(msg, signal.aborted ? "cancelled" : "network")
 }
 
-export const runOpenAI: EngineRunner = async ({
-  engine,
-  prompt,
-  req,
-  signal,
-  delta,
-}) => {
+/** The answer did not start, and another model may well succeed. */
+const RETRYABLE = new Set([404, 429, 500, 502, 503, 504])
+
+const geminiLists = new Map<string, Promise<string[]>>()
+
+/** The key's translation-capable Gemini models, best first, fetched once per session. */
+function geminiModels(engine: EngineContext["engine"]) {
+  const key = `${engine.baseUrl}|${(engine.apiKey ?? "").slice(-6)}`
+  let list = geminiLists.get(key)
+  if (!list) {
+    list = listModels("openai", engine.baseUrl ?? "", engine.apiKey ?? "")
+      .then((ids) => translationModels(ids, engine.baseUrl))
+      .catch(() => [])
+    geminiLists.set(key, list)
+  }
+  return list
+}
+
+/**
+ * Models whose daily quota ran out, until the time Google said it resets. Asking again
+ * before then only burns more of the user's requests and time.
+ */
+const exhausted = new Map<string, { until: number; error: EngineError }>()
+const exhaustedKey = (engine: EngineContext["engine"], model: string) =>
+  `${engine.baseUrl}|${(engine.apiKey ?? "").slice(-6)}|${model}`
+
+function spentError(engine: EngineContext["engine"], model: string) {
+  const hit = exhausted.get(exhaustedKey(engine, model))
+  if (!hit) return null
+  if (hit.until > Date.now()) return hit.error
+  exhausted.delete(exhaustedKey(engine, model))
+  return null
+}
+
+const wait = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const id = setTimeout(resolve, ms)
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(id)
+        reject(new EngineError("cancelled", "cancelled"))
+      },
+      { once: true }
+    )
+  })
+
+export const runOpenAI: EngineRunner = async (ctx) => {
+  const { engine } = ctx
+  if (!engine.model)
+    throw new EngineError("No model selected for this API engine.", "auth")
+  if (!isGeminiApi(engine.baseUrl)) return openAIOnce(ctx, engine.model)
+  // Gemini models are often overloaded for a while (503), and Pro models have no quota
+  // on keys without billing (429). Rather than fail, try the next best model.
+  const tried = [engine.model]
+  let first: EngineError | null = null
+  let resent = false
+  let waited = false
+  const nextModel = async () => {
+    if (tried.length >= 4) return null
+    const next = (await geminiModels(engine)).find(
+      (m) => !tried.includes(m) && !spentError(engine, m)
+    )
+    if (next) tried.push(next)
+    return next ?? null
+  }
+  for (;;) {
+    const model = tried[tried.length - 1]
+    const spent = spentError(engine, model)
+    if (spent) {
+      first ??= spent
+      const next = await nextModel()
+      if (!next) throw first
+      log("api", `${model} is out of daily quota, using ${next}`)
+      ctx.stage("retrying", next)
+      continue
+    }
+    let wrote = false
+    try {
+      return await openAIOnce(
+        {
+          ...ctx,
+          delta: (t) => {
+            wrote = true
+            ctx.delta(t)
+          },
+        },
+        model
+      )
+    } catch (e) {
+      const err = e as EngineError
+      const retry = err.status ? RETRYABLE.has(err.status) : err.timedOut
+      if ((wrote && !err.midStream) || !retry || ctx.signal.aborted)
+        throw first ?? err
+      if (wrote) ctx.snapshot("") // drop the cut-off half answer before the retry
+      // An answer cut off half way is usually a one-off: the same model gets one more go.
+      if (err.midStream && !resent) {
+        resent = true
+        log("api", `${model} cut off (${err.status}), sending again`)
+        ctx.stage("retrying", model)
+        continue
+      }
+      if (err.status === 429 && err.daily) {
+        exhausted.set(exhaustedKey(engine, model), {
+          until: Date.now() + (err.retryAfter ?? 3600) * 1000,
+          error: err,
+        })
+      } else if (err.status === 429 && !waited && (err.retryAfter ?? 0) <= 60) {
+        // A per-minute limit clears in seconds: wait it out rather than spend another model.
+        waited = true
+        const s = err.retryAfter ?? 20
+        log("api", `${model} rate limited, waiting ${s}s`)
+        ctx.stage("waiting", `${s}`)
+        await wait(s * 1000, ctx.signal)
+        continue
+      }
+      first ??= err
+      const next = await nextModel()
+      if (!next) throw first
+      log("api", `${model} failed (${err.status ?? "timeout"}), trying ${next}`)
+      ctx.stage("retrying", next)
+    }
+  }
+}
+
+async function openAIOnce(
+  { engine, prompt, req, signal, delta, stage }: EngineContext,
+  model: string
+): Promise<string> {
   const base = (engine.baseUrl || "https://api.openai.com/v1").replace(
     /\/+$/,
     ""
   )
-  if (!engine.model)
-    throw new EngineError("No model selected for this API engine.", "auth")
   const content: unknown = req.image
     ? [
         { type: "text", text: prompt.user },
@@ -37,12 +164,38 @@ export const runOpenAI: EngineRunner = async ({
     headers["HTTP-Referer"] = "https://github.com/hamzaban"
     headers["X-Title"] = "Hamzaban"
   }
+  const started = Date.now()
+  const step = (name: string, extra?: unknown) =>
+    log(
+      "api",
+      `${((Date.now() - started) / 1000).toFixed(1)}s`,
+      name,
+      ...(extra === undefined ? [] : [extra])
+    )
+  stage("sending")
+  step("request", {
+    host: new URL(base).host,
+    model,
+    image: !!req.image,
+    imageKB: req.image ? Math.round(req.image.length / 1365) : 0,
+  })
+  // No answer at all after a while usually means a stuck connection: give up with a
+  // clear error instead of spinning forever. Each streamed piece resets the clock.
+  const idle = new AbortController()
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  const armIdle = (ms: number) => {
+    clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => idle.abort(), ms)
+  }
+  // Gemini can switch to another model, so a silent one is dropped sooner.
+  const firstWait = isGeminiApi(base) ? 60 : 90
+  armIdle(firstWait * 1000)
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
     headers,
-    signal,
+    signal: AbortSignal.any([signal, idle.signal]),
     body: JSON.stringify({
-      model: engine.model,
+      model,
       stream: true,
       messages: [
         { role: "system", content: prompt.system },
@@ -51,24 +204,100 @@ export const runOpenAI: EngineRunner = async ({
       // Gemini models always think; translation needs little of it and a lot less waiting.
       ...(isGeminiApi(base) ? { reasoning_effort: "low" } : {}),
     }),
-  }).catch((e) => netError(e, signal))
-  if (!res.ok) throw await httpError(res)
+  }).catch((e) => {
+    clearTimeout(idleTimer)
+    step("failed before a response", { message: (e as Error)?.message })
+    if (idle.signal.aborted && !signal.aborted) {
+      const err = new EngineError(
+        `${model} did not respond in ${firstWait} s.`,
+        "network"
+      )
+      err.timedOut = true
+      throw err
+    }
+    return netError(e, signal)
+  })
+  step("response", { status: res.status })
+  if (!res.ok) {
+    clearTimeout(idleTimer)
+    throw await httpError(res)
+  }
+  stage("thinking")
   let full = ""
-  for await (const line of readLines(res, signal)) {
-    if (!line.startsWith("data:")) continue
-    const payload = line.slice(5).trim()
-    if (payload === "[DONE]") break
-    try {
-      const j = JSON.parse(payload)
-      const piece: string = j.choices?.[0]?.delta?.content ?? ""
+  let finish = ""
+  // Gemini reports a failure part way through as a plain (multi-line) JSON body
+  // appended to the stream, so lines outside the SSE framing are collected.
+  let stray = ""
+  try {
+    for await (const line of readLines(res, signal)) {
+      armIdle(60000)
+      if (!line.startsWith("data:")) {
+        if (stray || /^\s*[[{]/.test(line)) stray += line + "\n"
+        continue
+      }
+      const payload = line.slice(5).trim()
+      if (payload === "[DONE]") break
+      let j: {
+        error?: { message?: string }
+        choices?: { delta?: { content?: string }; finish_reason?: string }[]
+      }
+      try {
+        j = JSON.parse(payload)
+      } catch {
+        continue // keep-alive or partial line
+      }
+      if (j.error) {
+        step("stream error", j.error)
+        throw new EngineError(j.error.message ?? "API error", "unknown")
+      }
+      const choice = j.choices?.[0]
+      if (choice?.finish_reason) finish = choice.finish_reason
+      const piece = choice?.delta?.content ?? ""
       if (piece) {
+        if (!full) step("first text")
         full += piece
         delta(piece)
       }
+    }
+  } catch (e) {
+    if (idle.signal.aborted && !signal.aborted) {
+      step("stalled")
+      throw new EngineError(
+        `${new URL(base).host} stopped sending for 60 s.`,
+        "network"
+      )
+    }
+    throw e
+  } finally {
+    clearTimeout(idleTimer)
+  }
+  if (stray) {
+    let error: { code?: number; message?: string; status?: string } | undefined
+    try {
+      const parsed = JSON.parse(stray)
+      error = (Array.isArray(parsed) ? parsed[0] : parsed)?.error
     } catch {
-      // keep-alive or partial line
+      // not JSON after all
+    }
+    step("stream error", error ?? stray.slice(0, 300))
+    if (error) {
+      const err = new EngineError(
+        `${model} stopped part way: ${error.message ?? error.status ?? "server error"}`,
+        "network",
+        error.code ?? 503
+      )
+      err.midStream = true
+      throw err
     }
   }
+  step("done", { chars: full.length, finish })
+  if (!full.trim())
+    throw new EngineError(
+      finish && finish !== "stop"
+        ? `The model returned no text (finish reason: ${finish}).`
+        : "The model returned no text.",
+      "unknown"
+    )
   return full
 }
 

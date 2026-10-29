@@ -24,6 +24,11 @@ interface SiteDef {
   send: string[]
   stop: string[]
   reply: string
+  /**
+   * Rendered-answer blocks found anywhere on the page, used when the site renames its
+   * turn markers and `reply` stops matching. Only the outermost matches count.
+   */
+  loose?: string
   /** The user's own message bubbles, used to confirm a prompt was really sent. */
   sent: string
   content: string[]
@@ -58,6 +63,8 @@ const SITES: Record<SiteId, SiteDef> = {
     stop: ["button[data-testid='stop-button']", "button[aria-label*='Stop' i]"],
     reply:
       "[data-message-author-role='assistant'], [data-message-role='assistant'], [data-turn='assistant']",
+    loose:
+      "[data-assistant-markdown-root], [data-assistant-markdown], .markdown, .prose",
     sent: "[data-message-author-role='user'], [data-message-role='user'], [data-turn='user']",
     content: [
       "[data-assistant-markdown-root]",
@@ -332,15 +339,20 @@ const PAGE_STATE = `
  */
 const TURNS_OUTLINE = `
   const pick = (el) => { const o = { tag: el.tagName.toLowerCase() };
+    if (typeof el.className === 'string' && el.className) o.class = el.className.slice(0, 60);
     for (const a of el.attributes) if (/^(data-|role$|id$)/.test(a.name)) o[a.name] = a.value.slice(0, 40); return o };
   const root = document.querySelector('main') || document.body;
   const turns = [...root.querySelectorAll('article, section[data-turn], [data-message-author-role], [data-message-role], [data-turn], [data-testid*="turn" i], [data-message-id]')];
-  return { url: location.href, turns: turns.length, last: turns.slice(-6).map(pick), stop: !!__q(A.stop) }`
+  // The ancestors of the last rendered answer show which markers the site uses now.
+  const md = [...document.querySelectorAll('.markdown, .prose, [class*="markdown" i]')];
+  const chain = []; for (let n = md[md.length - 1], i = 0; n && n !== document.body && i < 10; n = n.parentElement, i++) chain.push(pick(n));
+  return { url: location.href, turns: turns.length, last: turns.slice(-6).map(pick), markdown: md.length, chain, stop: !!__q(A.stop) }`
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const HELPERS = `
   const __q = (list) => { for (const s of list) { try { const el = document.querySelector(s); if (el) return el } catch (e) {} } return null };
+  const __loose = (sel) => sel ? [...document.querySelectorAll(sel)].filter((el) => !el.parentElement?.closest(sel)) : [];
 `
 
 function js(
@@ -406,6 +418,7 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
     win.isVisible() && !(win as unknown as { __ghost?: boolean }).__ghost
   if (!userVisible) ghost(win, true)
   step("start", { image: !!ctx.req.image, chars: ctx.prompt.combined.length })
+  ctx.stage("opening", def.title)
   try {
     // loadURL can hang when a navigation is held up, so it never gets more than 25 s.
     await Promise.race([wc.loadURL(def.newChat).catch(() => {}), sleep(25000)])
@@ -437,10 +450,10 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
     const counts = () =>
       js(
         wc,
-        `return [document.querySelectorAll(A.reply).length, document.querySelectorAll(A.sent).length]`,
-        { reply: def.reply, sent: def.sent }
-      ) as Promise<[number, number]>
-    const [before, sentBefore] = await counts()
+        `return [document.querySelectorAll(A.reply).length, document.querySelectorAll(A.sent).length, __loose(A.loose).length]`,
+        { reply: def.reply, sent: def.sent, loose: def.loose ?? null }
+      ) as Promise<[number, number, number]>
+    const [before, sentBefore, looseBefore] = await counts()
     // An attachment shows up as a known preview element or, failing that, as one more <img> on the page.
     const imagesBefore = (await js(
       wc,
@@ -453,6 +466,7 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
       }) as Promise<boolean>
 
     if (ctx.req.image) {
+      ctx.stage("attaching", def.title)
       // The composer is in the server-rendered HTML before the site's scripts take over, and a
       // file handed over that early is ignored. Re-offer it until the site shows a preview.
       const attach = () =>
@@ -462,7 +476,7 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
            const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/png';
            const bin = atob(b64); const bytes = new Uint8Array(bin.length);
            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-           const file = new File([bytes], 'hamzaban-capture.png', { type: mime });
+           const file = new File([bytes], 'hamzaban-capture.' + (mime.split('/')[1] || 'png').replace('jpeg', 'jpg'), { type: mime });
            const dt = new DataTransfer(); dt.items.add(file);
            const input = A.mode === 'input' ? document.querySelector('input[type=file][accept*="image"], input[type=file]') : null;
            if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); return true }
@@ -520,10 +534,11 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
     // Click send once it is enabled (uploads finish first) and keep trying until the site
     // shows our message; a click while an upload is still running is silently ignored.
     const isSent = async () => {
-      const [r, u] = await counts()
+      const [r, u, l] = await counts()
       return (
         r > before ||
         u > sentBefore ||
+        l > looseBefore ||
         !!(await js(wc, `return !!__q(A.stop)`, { stop: def.stop }))
       )
     }
@@ -552,6 +567,7 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
       )
     }
     step("sent")
+    ctx.stage("thinking")
 
     // Stream the answer by polling the last assistant message.
     let last = ""
@@ -573,8 +589,9 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
       const snap = (await js(
         wc,
         `const all = document.querySelectorAll(A.reply);
-         if (all.length <= A.before) return { has: false, streaming: true };
-         const node = all[all.length - 1];
+         const loose = all.length > A.before ? [] : __loose(A.loose);
+         if (all.length <= A.before && loose.length <= A.looseBefore) return { has: false, streaming: true };
+         const node = loose.length ? loose[loose.length - 1] : all[all.length - 1];
          let el = null; for (const s of A.content) { const f = node.querySelector(s); if (f) { el = f; break } }
          el = el || node;
          const codes = A.smart ? [...el.querySelectorAll('pre code')] : [];
@@ -591,6 +608,8 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
           reply: def.reply,
           content: def.content,
           before,
+          loose: def.loose ?? null,
+          looseBefore,
           smart: ctx.prompt.smart,
           stop: def.stop,
           attr: def.streamingAttr ?? null,
@@ -624,8 +643,8 @@ async function runSite(site: SiteId, ctx: EngineContext): Promise<string> {
         throw await fail(`${def.title} did not answer.`, "network")
       } else if (Date.now() - sentAt > 30000) {
         // Not even our own message is on the page: the site is holding the request.
-        const [r, u] = await counts()
-        if (r <= before && u <= sentBefore) {
+        const [r, u, l] = await counts()
+        if (r <= before && u <= sentBefore && l <= looseBefore) {
           step("held", await outline())
           throw await fail(
             `${def.title} accepted the message but is holding it.`,

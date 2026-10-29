@@ -58,9 +58,18 @@
   },
   "productName": "Hamzaban",
   "description": "Hamzaban — a liquid-glass desktop translator",
+  "homepage": "https://github.com/shixshinobi/hamzaban",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shixshinobi/hamzaban.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shixshinobi/hamzaban/issues"
+  },
   "author": {
     "name": "Shahabedin Mohamadi",
     "email": "mohamadishahabedin@gmail.com"
   },
-  "main": "dist-electron/main.cjs"
+  "main": "dist-electron/main.cjs",
+  "packageManager": "pnpm@12.6.0"
 }

@@ -82,6 +82,13 @@ const api = {
   },
   app: {
     platform: (): Promise<Platform> => ipcRenderer.invoke("app:platform"),
+    /** Full bounds of the display this window is on, taskbar included (DIP). */
+    displayBounds: (): Promise<{
+      x: number
+      y: number
+      width: number
+      height: number
+    }> => ipcRenderer.invoke("app:display-bounds"),
     openExternal: (url: string): Promise<void> =>
       ipcRenderer.invoke("app:open-external", url),
     onNav: (fn: (route: string) => void) => on("nav", fn),
@@ -107,6 +114,21 @@ const api = {
       filters?: { name: string; extensions: string[] }[]
     ): Promise<{ name: string; content: string } | null> =>
       ipcRenderer.invoke("file:read-text", filters),
+    /** `onPicked` fires once a file is chosen, before its bytes arrive. */
+    readBinary: async (
+      filters: { name: string; extensions: string[] }[],
+      onPicked?: (name: string) => void
+    ): Promise<{ name: string; data: Uint8Array } | null> => {
+      const picked: { name: string; path: string } | null =
+        await ipcRenderer.invoke("file:pick", filters)
+      if (!picked) return null
+      onPicked?.(picked.name)
+      const data: Uint8Array = await ipcRenderer.invoke(
+        "file:read-binary",
+        picked.path
+      )
+      return { name: picked.name, data }
+    },
   },
 }
 

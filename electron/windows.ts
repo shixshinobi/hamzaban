@@ -4,7 +4,9 @@ import {
   desktopCapturer,
   nativeTheme,
   screen,
+  session,
   shell,
+  webContents,
   type BrowserWindowConstructorOptions,
 } from "electron"
 import os from "node:os"
@@ -42,6 +44,14 @@ export function platformInfo(): Platform {
 
 function resolveMaterial(pref: WindowMaterial): Platform["material"] {
   if (pref === "none") return "none"
+  if (pref === "clear") return "clear"
+  // Live blur needs a window that can leave itself out of screen capture: Windows 10
+  // 2004 and later. Without that it would blur its own picture, so it falls back to clear.
+  if (pref === "live")
+    return process.platform === "win32" &&
+      Number(os.release().split(".")[2] ?? 0) >= 19041
+      ? "live"
+      : "clear"
   if (process.platform === "darwin") return "vibrancy"
   if (process.platform === "win32") {
     const build = Number(os.release().split(".")[2] ?? 0)
@@ -96,8 +106,13 @@ function glass(kind: "main" | "popup"): BrowserWindowConstructorOptions {
   if (process.platform === "win32") {
     return {
       ...base,
-      backgroundMaterial:
-        material === "acrylic" || material === "mica" ? material : "none",
+      // A transparent window shows what is behind it as is; the OS materials blur it.
+      ...(material === "clear" || material === "live"
+        ? { transparent: true }
+        : {
+            backgroundMaterial:
+              material === "acrylic" || material === "mica" ? material : "none",
+          }),
       titleBarStyle: "hidden",
       ...(kind === "main"
         ? {
@@ -120,8 +135,12 @@ function glass(kind: "main" | "popup"): BrowserWindowConstructorOptions {
   if (process.platform === "darwin") {
     return {
       ...base,
-      vibrancy: kind === "popup" ? "popover" : "under-window",
-      visualEffectState: "active",
+      ...(material === "clear"
+        ? { transparent: true }
+        : {
+            vibrancy: kind === "popup" ? "popover" : "under-window",
+            visualEffectState: "active",
+          }),
       ...(kind === "main"
         ? {
             titleBarStyle: "hiddenInset",
@@ -146,6 +165,73 @@ export function refreshTitleBar() {
   })
 }
 
+/**
+ * Transparency is fixed when a window is created, so switching to or from the clear
+ * material rebuilds the windows in place (same position, size and visibility).
+ */
+/** Window materials drawn on a transparent window, which is fixed at creation. */
+export const isTransparentMaterial = (m: Platform["material"]) =>
+  m === "clear" || m === "live"
+
+/**
+ * With live blur the window copies the screen behind it, so it must be left out of
+ * screen capture, or it would capture (and blur) itself. The side effect, which the
+ * setting explains, is that screenshots and screen sharing show it blank.
+ */
+export function applyCaptureExclusion() {
+  const live = resolveMaterial(getSettings().material) === "live"
+  for (const w of [mainWin, popupWin])
+    if (w && !w.isDestroyed()) w.setContentProtection(live)
+}
+
+/**
+ * Grants the live-blur layer a capture of the display its window is on. Only the app's
+ * own windows, and only while live blur is on, get one.
+ */
+export function setupLiveCapture() {
+  session.defaultSession.setDisplayMediaRequestHandler(async (req, cb) => {
+    const wc = req.frame ? webContents.fromFrame(req.frame) : undefined
+    const win = wc ? BrowserWindow.fromWebContents(wc) : null
+    if (
+      !win ||
+      (win !== mainWin && win !== popupWin) ||
+      !isAppUrl(req.frame?.url ?? "") ||
+      resolveMaterial(getSettings().material) !== "live"
+    )
+      return cb({})
+    const display = screen.getDisplayMatching(win.getBounds())
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: 0, height: 0 },
+    })
+    const source =
+      sources.find((s) => s.display_id === String(display.id)) ?? sources[0]
+    cb(source ? { video: source } : {})
+  })
+}
+
+export function rebuildWindows() {
+  if (mainWin && !mainWin.isDestroyed()) {
+    // Content bounds: a transparent window has no invisible resize border, an OS one does.
+    const bounds = mainWin.getContentBounds()
+    const visible = mainWin.isVisible()
+    const maximized = mainWin.isMaximized()
+    mainWin.destroy()
+    mainWin = null
+    const win = createMainWindow(false)
+    win.setContentBounds(bounds)
+    win.once("ready-to-show", () => {
+      if (maximized) win.maximize()
+      if (visible) win.show()
+    })
+  }
+  if (popupWin && !popupWin.isDestroyed()) {
+    popupWin.destroy()
+    popupWin = null
+    warmUpPopup()
+  }
+}
+
 export function getMainWindow() {
   return mainWin && !mainWin.isDestroyed() ? mainWin : null
 }
@@ -167,6 +253,8 @@ export function createMainWindow(show = true) {
     minHeight: 540,
     title: "Hamzaban",
   })
+  if (resolveMaterial(getSettings().material) === "live")
+    mainWin.setContentProtection(true)
   load(mainWin, "main")
   mainWin.once("ready-to-show", () => show && mainWin?.show())
   mainWin.on("close", (e) => {
@@ -196,6 +284,8 @@ function ensurePopup() {
     title: "Hamzaban",
   })
   popupWin.setAlwaysOnTop(true, "pop-up-menu")
+  if (resolveMaterial(getSettings().material) === "live")
+    popupWin.setContentProtection(true)
   if (process.platform === "darwin")
     popupWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   load(popupWin, "popup")

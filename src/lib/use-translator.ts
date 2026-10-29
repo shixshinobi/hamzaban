@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { translateKey, type StringKey } from "./i18n"
+import { shrinkForUpload } from "./image"
 import { recognize } from "./ocr"
 import { buildRequest, engineIsVision } from "./request"
 import { useApp } from "./store"
@@ -78,6 +79,8 @@ export function useTranslator() {
       } else {
         setOcr({ running: false, progress: 0, text: null })
       }
+      // OCR above used the full image; the model gets a lighter copy.
+      if (image) image = await shrinkForUpload(image).catch(() => image)
       await run(buildRequest(settings, { ...input, text, image, engineId }))
     },
     [run, fail]

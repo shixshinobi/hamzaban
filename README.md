@@ -3,6 +3,28 @@
 مترجم دسکتاپ برای ویندوز، مک و لینوکس، در حال‌وهوای QTranslate و با ظاهر شیشه‌ای (Liquid Glass).
 هر جای سیستم متنی را انتخاب کنید، میانبر را بزنید و ترجمه کنار نشانگر ماوس ظاهر می‌شود.
 
+## دانلود
+
+**[⬇ دانلود آخرین نسخه](https://github.com/shixshinobi/hamzaban/releases/latest)**
+
+در صفحه‌ی دانلود، از بخش **Assets** فایل سیستم‌عامل خود را بردارید:
+
+| سیستم‌عامل | فایل |
+| --- | --- |
+| ویندوز ۱۰ و ۱۱ (نصب) | `Hamzaban-Setup-…-x64.exe` |
+| ویندوز روی پردازنده‌ی ARM (مثل Surface Pro X) | `Hamzaban-Setup-…-arm64.exe` |
+| ویندوز (بدون نصب) | `Hamzaban-Portable-….exe` |
+| مک با تراشه‌ی Apple (M1 به بعد) | `Hamzaban-…-mac-arm64.dmg` |
+| مک اینتل | `Hamzaban-…-mac-x64.dmg` |
+| لینوکس (همه‌ی توزیع‌ها) | `Hamzaban-…-linux-x86_64.AppImage` |
+| اوبونتو و دبیان | `Hamzaban-…-linux-amd64.deb` |
+
+همزبان هنوز امضای دیجیتال ندارد، برای همین بار اول سیستم‌عامل هشدار می‌دهد:
+
+- **ویندوز**: در پیام «Windows protected your PC» روی **More info** و بعد **Run anyway** بزنید.
+- **مک**: همزبان را از فایل dmg به Applications بکشید. بار اول روی برنامه راست‌کلیک کنید و **Open** را بزنید. اگر باز نشد، از System Settings ← Privacy & Security گزینه‌ی **Open Anyway** را بزنید.
+- **لینوکس**: AppImage را با `chmod +x Hamzaban-*.AppImage` اجرایی کنید، یا deb را با `sudo apt install ./Hamzaban-*.deb` نصب کنید.
+
 ## امکانات
 
 - **چند موتور ترجمه با یک کلیک**: گوگل ترنسلیت (رایگان و بدون کلید)، ChatGPT، Claude و Gemini با حساب کاربری خودتان، Codex CLI، Claude Code، Gemini CLI، Ollama (محلی) و هر تعداد کلید API که برای هر کدام مدل جداگانه تعیین می‌کنید (OpenAI، Anthropic، Gemini، OpenRouter، DeepSeek، Groq، Mistral، xAI یا هر سرویس سازگار با OpenAI).

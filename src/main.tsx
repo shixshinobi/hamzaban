@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { hz } from "@/lib/hz"
 import { useApp } from "@/lib/store"
-import { useThemeClass } from "@/lib/theme"
+import { applyAppearance, useThemeClass } from "@/lib/theme"
 import { Capture } from "@/views/capture"
 import { MainWindow } from "@/views/main-window"
 import { Popup } from "@/views/popup"
@@ -33,6 +33,10 @@ function Root() {
     html.dataset.material = platform?.material ?? "none"
     html.dataset.window = route
   }, [settings?.uiLanguage, platform])
+
+  useEffect(() => {
+    if (settings) applyAppearance(settings)
+  }, [settings])
 
   if (route === "capture") return <Capture />
   if (!settings || !platform) return null

@@ -56,12 +56,25 @@ export type Shortcuts = Record<ShortcutAction, string>
 
 export type UiLanguage = "fa" | "en"
 export type ThemePref = "system" | "light" | "dark"
-export type WindowMaterial = "auto" | "acrylic" | "mica" | "none"
+/** "clear": a fully transparent window, so what is behind it shows unblurred. */
+/** "live": clear, plus a live blurred copy of the screen behind the window (Windows). */
+export type WindowMaterial =
+  "auto" | "acrylic" | "mica" | "clear" | "live" | "none"
+/** What is drawn behind the glass panels. */
+export type Backdrop = "aurora" | "orbs" | "gradient" | "grid" | "plain"
+export type AccentColor =
+  "blue" | "violet" | "pink" | "red" | "orange" | "green" | "teal" | "graphite"
 
 export interface Settings {
   uiLanguage: UiLanguage
   theme: ThemePref
   material: WindowMaterial
+  accent: AccentColor
+  backdrop: Backdrop
+  /** How see-through the glass surfaces are, 0 (opaque) to 100. */
+  transparency: number
+  /** Backdrop blur behind the glass surfaces, in pixels. */
+  blur: number
   sourceLang: string
   targetLang: string
   /** Language used when the detected source already equals the target. */
@@ -98,8 +111,20 @@ export interface TranslateRequest {
   extraInstruction?: string
 }
 
+/** What a job is doing before its first words arrive, shown while the user waits. */
+export type JobStage =
+  | "sending"
+  | "thinking"
+  | "retrying"
+  /** Waiting out a per-minute rate limit; `detail` is the number of seconds. */
+  | "waiting"
+  | "opening"
+  | "attaching"
+
 export type TranslateEvent =
   | { jobId: string; type: "start"; engineId: string; engineName: string }
+  /** `detail` carries the model being tried when the stage is "retrying". */
+  | { jobId: string; type: "stage"; stage: JobStage; detail?: string }
   | { jobId: string; type: "delta"; text: string }
   /** Full replacement of the accumulated text (web/CLI engines report snapshots). */
   | { jobId: string; type: "snapshot"; text: string }
@@ -115,6 +140,8 @@ export type ErrorCode =
   | "auth"
   /** A web session accepted the prompt but never started answering (usually its bot check). */
   | "held"
+  /** The key's request quota is used up (daily, or per minute after waiting once). */
+  | "quota"
   | "cancelled"
   | "unsupported"
   | "unknown"
@@ -159,5 +186,5 @@ export interface PopupPayload {
 
 export interface Platform {
   os: "win32" | "darwin" | "linux"
-  material: "acrylic" | "mica" | "vibrancy" | "none"
+  material: "acrylic" | "mica" | "vibrancy" | "clear" | "live" | "none"
 }

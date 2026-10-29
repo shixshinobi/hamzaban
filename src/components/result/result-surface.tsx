@@ -8,7 +8,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react"
 import { motion } from "motion/react"
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   blocksToText,
   parseBlocks,
@@ -17,6 +17,7 @@ import {
   type Layout,
 } from "@shared/blocks"
 import { isRtl, textDir } from "@shared/languages"
+import type { JobStage } from "@shared/types"
 import {
   Alert,
   AlertAction,
@@ -26,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { hz } from "@/lib/hz"
-import { useT } from "@/lib/i18n"
+import { useT, useUiLang, type StringKey } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
 import type { TranslationState } from "@/lib/use-translation"
 import { cn } from "@/lib/utils"
@@ -81,23 +82,65 @@ export function useResultModel(state: TranslationState): ResultModel {
   }, [state])
 }
 
+const STAGE_LABEL: Record<JobStage, StringKey> = {
+  sending: "stageSending",
+  thinking: "stageThinking",
+  retrying: "stageRetrying",
+  waiting: "stageWaiting",
+  opening: "stageOpening",
+  attaching: "stageAttaching",
+}
+
+/** Seconds since `since`, ticking once a second while mounted. */
+function useElapsed(since: number) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return since ? Math.max(0, Math.floor((now - since) / 1000)) : 0
+}
+
 function LoadingShape({
   layout,
-  engineName,
+  state,
 }: {
   layout: Layout
-  engineName: string | null
+  state: TranslationState
 }) {
   const t = useT()
+  const lang = useUiLang()
+  const seconds = useElapsed(state.startedAt)
+  const { stage, engineName } = state
+  // Stages about one site or model name it; the rest name the engine.
+  const fmt = new Intl.NumberFormat(lang === "fa" ? "fa-IR" : "en")
+  const label = stage
+    ? stage.stage === "waiting"
+      ? `${t("stageWaiting")} (${fmt.format(Number(stage.detail ?? 0))} ${t("secondsShort")})`
+      : stage.detail
+        ? `${t(STAGE_LABEL[stage.stage])} ${stage.detail}`
+        : `${t(STAGE_LABEL[stage.stage])}${engineName ? ` · ${engineName}` : ""}`
+    : `${t("translating")}${engineName ? ` · ${engineName}` : ""}`
   return (
     <div className="flex flex-col gap-3" aria-busy>
-      <div className="flex items-center gap-2 text-sm">
-        <SparklesIcon className="size-3.5 text-primary" />
-        <span className="shimmer-text font-medium">
-          {t("translating")}
-          {engineName ? ` · ${engineName}` : ""}
+      <div className="flex items-center gap-2 text-sm" aria-live="polite">
+        <SparklesIcon className="size-3.5 shrink-0 text-primary" />
+        <span className="shimmer-text min-w-0 truncate font-medium">
+          {label}
         </span>
+        {seconds >= 2 && (
+          <span className="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+            {new Intl.NumberFormat(lang === "fa" ? "fa-IR" : "en").format(
+              seconds
+            )}{" "}
+            {t("secondsShort")}
+          </span>
+        )}
       </div>
+      <div className="indeterminate h-0.5 overflow-hidden rounded-full bg-muted" />
+      {seconds >= 20 && (
+        <p className="text-xs text-muted-foreground">{t("waitLong")}</p>
+      )}
       {layout === "dictionary" ? (
         <>
           <Skeleton className="h-8 w-40" />
@@ -138,19 +181,31 @@ function ErrorView({
       ? t("errNeedsLogin")
       : code === "held"
         ? t("errHeld")
-        : code === "not-installed"
-          ? t("errNotInstalled")
-          : code === "network"
-            ? t("errNetwork")
-            : code === "auth"
-              ? t("errAuth")
-              : t("errUnknown")
+        : code === "quota"
+          ? t("errQuota")
+          : code === "not-installed"
+            ? t("errNotInstalled")
+            : code === "network"
+              ? t("errNetwork")
+              : code === "auth"
+                ? t("errAuth")
+                : t("errUnknown")
   return (
     <Alert variant="destructive" className="glass-flat border-0">
       <TriangleAlertIcon />
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription className="break-words" dir="auto">
-        {code === "held" ? t("errHeldHint") : state.error?.message}
+        {code === "held" ? (
+          t("errHeldHint")
+        ) : code === "quota" ? (
+          <>
+            {state.error?.message}
+            <br />
+            {t("errQuotaHint")}
+          </>
+        ) : (
+          state.error?.message
+        )}
       </AlertDescription>
       <AlertAction className="flex gap-1">
         {code === "needs-login" && state.engineId && (
@@ -235,7 +290,7 @@ export function ResultSurface({
   if (state.status === "error")
     return <ErrorView state={state} onRetry={onRetry} />
   if (state.status === "waiting" || (!state.text && !state.dictionary))
-    return <LoadingShape layout={model.layout} engineName={state.engineName} />
+    return <LoadingShape layout={model.layout} state={state} />
 
   // Dictionary card: Google's native data, or the model's word/sense blocks.
   if (state.dictionary) {

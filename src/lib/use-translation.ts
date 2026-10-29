@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { DictionaryData, ErrorCode, TranslateRequest } from "@shared/types"
+import type {
+  DictionaryData,
+  ErrorCode,
+  JobStage,
+  TranslateRequest,
+} from "@shared/types"
 import { hz } from "./hz"
 
 export type JobStatus = "idle" | "waiting" | "streaming" | "done" | "error"
@@ -14,6 +19,9 @@ export interface TranslationState {
   error: { message: string; code?: ErrorCode } | null
   smart: boolean
   request: TranslateRequest | null
+  /** Progress before the first words, with the model or site it concerns. */
+  stage: { stage: JobStage; detail?: string } | null
+  startedAt: number
 }
 
 const EMPTY: TranslationState = {
@@ -26,6 +34,8 @@ const EMPTY: TranslationState = {
   error: null,
   smart: false,
   request: null,
+  stage: null,
+  startedAt: 0,
 }
 
 /** Runs one translation at a time and folds the main-process event stream into state. */
@@ -54,6 +64,8 @@ export function useTranslation(
           switch (e.type) {
             case "start":
               return { ...s, engineId: e.engineId, engineName: e.engineName }
+            case "stage":
+              return { ...s, stage: { stage: e.stage, detail: e.detail } }
             case "delta":
               return { ...s, status: "streaming", text: s.text + e.text }
             case "snapshot":
@@ -93,6 +105,7 @@ export function useTranslation(
         status: "waiting",
         smart: !!req.smart,
         request: req,
+        startedAt: Date.now(),
       })
       const id = crypto.randomUUID()
       jobRef.current = id

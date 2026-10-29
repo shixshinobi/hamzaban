@@ -169,7 +169,7 @@ export function StatusDot({
       className={cn(
         "inline-block size-1.5 shrink-0 rounded-full",
         status === undefined
-          ? "bg-muted-foreground/40"
+          ? "animate-pulse bg-muted-foreground/40"
           : status.ok
             ? "bg-success shadow-[0_0_8px_var(--success)]"
             : "bg-warning",

@@ -8,8 +8,9 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { LiveBackdrop } from "@/components/glass/live-backdrop"
 import { Logo } from "@/components/logo"
 import { WindowControls } from "@/components/glass/window-controls"
 import { Kbd } from "@/components/ui/kbd"
@@ -106,11 +107,17 @@ function headerInset(os?: string): React.CSSProperties {
   return {}
 }
 
+const KEPT: Route[] = ["translate", "image", "pdf"]
+
 export function MainWindow() {
   const t = useT()
   const route = useApp((s) => s.route)
+  const [visited, setVisited] = useState<Route[]>([route])
+  if (KEPT.includes(route) && !visited.includes(route))
+    setVisited([...visited, route])
   const setRoute = useApp((s) => s.setRoute)
   const os = useApp((s) => s.platform?.os)
+  const live = useApp((s) => s.platform?.material === "live")
   const settings = useApp((s) => s.settings!)
   const refreshStatus = useApp((s) => s.refreshStatus)
 
@@ -129,6 +136,7 @@ export function MainWindow() {
 
   return (
     <div className="window-shell flex flex-col">
+      {live && <LiveBackdrop />}
       <div className="aurora" />
       <header
         className="drag flex h-12 shrink-0 items-center gap-3 px-4"
@@ -165,22 +173,44 @@ export function MainWindow() {
         </nav>
 
         <main className="relative min-w-0 flex-1">
-          <AnimatePresence mode="wait" initial={false}>
+          {/* Work pages stay mounted once opened, so a loaded PDF, an image and their
+              translations (even one still running) survive a visit to another page.
+              No `filter` in these transitions: an ancestor with one cuts every panel's
+              backdrop blur off from the background, and the blur setting stops working. */}
+          {KEPT.filter((r) => visited.includes(r)).map((r) => (
             <motion.div
-              key={route}
+              key={r}
               className="absolute inset-0"
-              initial={{ opacity: 0, scale: 0.985, filter: "blur(6px)" }}
-              animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-              exit={{ opacity: 0, scale: 0.99, filter: "blur(4px)" }}
+              hidden={route !== r}
+              inert={route !== r}
+              initial={false}
+              animate={
+                route === r
+                  ? { opacity: 1, scale: 1 }
+                  : { opacity: 0, scale: 0.985 }
+              }
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             >
-              {route === "translate" && <TranslateView />}
-              {route === "image" && <ImageView />}
-              {route === "pdf" && <PdfView />}
-              {route === "styles" && <StylesView />}
-              {route === "history" && <HistoryView />}
-              {route === "settings" && <SettingsView />}
+              {r === "translate" && <TranslateView />}
+              {r === "image" && <ImageView />}
+              {r === "pdf" && <PdfView />}
             </motion.div>
+          ))}
+          <AnimatePresence mode="wait" initial={false}>
+            {!KEPT.includes(route) && (
+              <motion.div
+                key={route}
+                className="absolute inset-0"
+                initial={{ opacity: 0, scale: 0.985 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.99 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {route === "styles" && <StylesView />}
+                {route === "history" && <HistoryView />}
+                {route === "settings" && <SettingsView />}
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
       </div>

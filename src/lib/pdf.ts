@@ -6,8 +6,12 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
 export type { PDFDocumentProxy }
 
-export async function openPdf(data: ArrayBuffer): Promise<PDFDocumentProxy> {
-  return pdfjs.getDocument({ data: new Uint8Array(data) }).promise
+export async function openPdf(
+  data: ArrayBuffer | Uint8Array
+): Promise<PDFDocumentProxy> {
+  return pdfjs.getDocument({
+    data: data instanceof Uint8Array ? data : new Uint8Array(data),
+  }).promise
 }
 
 interface TextItemLike {

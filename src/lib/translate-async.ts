@@ -8,6 +8,10 @@ export function translateAsync(
   signal?: AbortSignal
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    const cancelled = () =>
+      Object.assign(new Error("cancelled"), { code: "cancelled" })
+    // A stop pressed before this call would never fire "abort" again.
+    if (signal?.aborted) return reject(cancelled())
     const id = crypto.randomUUID()
     let acc = ""
     const off = hz.translate.onEvent((e) => {
@@ -24,9 +28,16 @@ export function translateAsync(
         reject(Object.assign(new Error(e.message), { code: e.code }))
       }
     })
-    signal?.addEventListener("abort", () => void hz.translate.cancel(id), {
-      once: true,
-    })
+    // Settle right away instead of waiting for the engine to wind down.
+    signal?.addEventListener(
+      "abort",
+      () => {
+        off()
+        void hz.translate.cancel(id)
+        reject(cancelled())
+      },
+      { once: true }
+    )
     void hz.translate.start(req, id)
   })
 }

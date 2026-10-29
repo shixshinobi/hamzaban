@@ -8,6 +8,7 @@ import {
   nativeImage,
   nativeTheme,
   Notification,
+  screen,
   shell,
   systemPreferences,
   Tray,
@@ -66,7 +67,11 @@ import {
   ICON,
   platformInfo,
   popupRendererReady,
+  applyCaptureExclusion,
+  isTransparentMaterial,
+  rebuildWindows,
   refreshTitleBar,
+  setupLiveCapture,
   setPopupPinned,
   showPopup,
   startCapture,
@@ -75,6 +80,12 @@ import {
 
 app.setName("Hamzaban")
 if (process.platform === "win32") app.setAppUserModelId("app.hamzaban")
+// Development only: `HZ_DEBUG_PORT=9333 pnpm dev` opens the windows to DevTools tooling.
+if (!app.isPackaged && process.env.HZ_DEBUG_PORT)
+  app.commandLine.appendSwitch(
+    "remote-debugging-port",
+    process.env.HZ_DEBUG_PORT
+  )
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -276,7 +287,18 @@ function applySettingsSideEffects(prev: Settings, next: Settings) {
   }
   if (prev.material !== next.material) {
     const info = platformInfo()
-    if (process.platform === "win32") {
+    // Both of these settings resolve to a transparent window, whatever the OS.
+    const was = prev.material === "clear" || prev.material === "live"
+    applyCaptureExclusion()
+    if (
+      process.platform !== "linux" &&
+      was !== isTransparentMaterial(info.material)
+    ) {
+      rebuildWindows()
+    } else if (
+      process.platform === "win32" &&
+      !isTransparentMaterial(info.material)
+    ) {
       for (const w of [getMainWindow(), getPopupWindow()]) {
         if (!w) continue
         w.setBackgroundMaterial(
@@ -389,6 +411,12 @@ function registerIpc() {
   ipcMain.on("capture:cancel", () => closeCapture())
 
   ipcMain.handle("app:platform", () => platformInfo())
+  ipcMain.handle("app:display-bounds", (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    return win
+      ? screen.getDisplayMatching(win.getBounds()).bounds
+      : screen.getPrimaryDisplay().bounds
+  })
   ipcMain.handle("app:open-external", (_e, url: string) => {
     if (/^(https?:\/\/|mailto:)/.test(url)) return shell.openExternal(url)
   })
@@ -425,6 +453,37 @@ function registerIpc() {
       }
     }
   )
+  // A native dialog with plain extension filters opens at once; an <input type=file>
+  // with MIME types first walks the Windows registry for matching extensions.
+  // Only a path chosen in this dialog may be read back.
+  const picked = new Set<string>()
+  // Each kind of file opens where the last one came from. Left to itself, Windows starts
+  // in its last-visited folder, which may be a OneDrive or network folder that takes
+  // seconds to list; a local folder opens at once.
+  const lastDir = new Map<string, string>()
+  ipcMain.handle("file:pick", async (e, filters?: Electron.FileFilter[]) => {
+    const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
+    const kind = filters?.[0]?.extensions[0] ?? "*"
+    const asked = Date.now()
+    // The parent loses focus the moment the dialog is on screen.
+    win?.once("blur", () =>
+      log("file", "dialog shown", { ms: Date.now() - asked })
+    )
+    const r = await dialog.showOpenDialog(win!, {
+      properties: ["openFile"],
+      filters,
+      defaultPath: lastDir.get(kind) ?? app.getPath("downloads"),
+    })
+    const file = r.filePaths[0]
+    if (r.canceled || !file) return null
+    lastDir.set(kind, path.dirname(file))
+    picked.add(file)
+    return { name: path.basename(file), path: file }
+  })
+  ipcMain.handle("file:read-binary", async (_e, file: string) => {
+    if (!picked.delete(file)) throw new Error("File was not picked")
+    return new Uint8Array(await fs.promises.readFile(file))
+  })
 
   ipcMain.on(
     "window:control",
@@ -532,6 +591,7 @@ app.whenReady().then(() => {
     broadcast("theme:changed", nativeTheme.shouldUseDarkColors)
   })
   registerIpc()
+  setupLiveCapture()
   onSettingsChange((s) => broadcast("settings:changed", s))
   setLoginChangeListener(() => broadcast("engines:changed"))
   setGoogleBlockedListener((site) => void explainGoogleBlock(site))
@@ -540,6 +600,13 @@ app.whenReady().then(() => {
   createMainWindow(!process.argv.includes("--hidden"))
   warmUpSelection()
   setTimeout(warmUpPopup, 1500)
+  // The first file dialog in a process loads the Windows shell's folder and icon
+  // handlers (OneDrive's among them), which can take seconds. Load them while idle.
+  if (process.platform === "win32")
+    setTimeout(
+      () => void app.getFileIcon(app.getPath("downloads")).catch(() => {}),
+      4000
+    )
   const failed = Object.entries(results).filter(([, ok]) => !ok)
   if (failed.length) {
     setTimeout(

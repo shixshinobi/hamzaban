@@ -49,10 +49,8 @@ export function buildPrompt(
     )
   if (req.image) {
     parts.push(
-      "\nThe input is an image. First read all visible text in natural reading order, then translate it. " +
-        (smart
-          ? 'Start with {"t":"quote","text":"<the original text you read>"} after the meta line, then the translation blocks.'
-          : "Output the original text, then a line containing only ---, then the translation.")
+      "\nThe input is an image. Read all visible text in natural reading order and translate it. " +
+        "Output only the translation: do not write out, quote or summarise the original text."
     )
   }
   if (smart) parts.push(`\n## Output format\n${BLOCK_PROTOCOL}`)

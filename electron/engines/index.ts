@@ -79,6 +79,9 @@ async function execute(
     chars: req.text.length,
     smart: prompt.smart,
   })
+  // CLIs give no sign of progress until they answer.
+  if (engine.kind.endsWith("-cli"))
+    emit({ jobId, type: "stage", stage: "thinking" })
   try {
     const text = await RUNNERS[engine.kind]({
       req,
@@ -94,11 +97,18 @@ async function execute(
         emit({ jobId, type: "snapshot", text: t })
       },
       dictionary: (data) => emit({ jobId, type: "dictionary", data }),
+      stage: (stage, detail) => emit({ jobId, type: "stage", stage, detail }),
       detected: (lang) => emit({ jobId, type: "detected", lang }),
       imageFile: async () => {
         if (tmpImage) return tmpImage
-        const b64 = (req.image ?? "").split(",")[1] ?? ""
-        tmpImage = path.join(os.tmpdir(), `hamzaban-${jobId}.png`)
+        const [meta, b64 = ""] = (req.image ?? "").split(",")
+        // CLIs pick the decoder from the extension, so it has to match the bytes.
+        const ext = /image\/jpe?g/.test(meta)
+          ? "jpg"
+          : /image\/webp/.test(meta)
+            ? "webp"
+            : "png"
+        tmpImage = path.join(os.tmpdir(), `hamzaban-${jobId}.${ext}`)
         fs.writeFileSync(tmpImage, Buffer.from(b64, "base64"))
         return tmpImage
       },

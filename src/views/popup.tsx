@@ -19,6 +19,7 @@ import {
 import { profileInput, type Layout } from "@shared/blocks"
 import { languageName, textDir } from "@shared/languages"
 import type { PopupPayload } from "@shared/types"
+import { LiveBackdrop } from "@/components/glass/live-backdrop"
 import { Logo } from "@/components/logo"
 import { LanguagePicker } from "@/components/pickers"
 import {
@@ -50,6 +51,7 @@ export function Popup() {
   const ui = useUiLang()
   const settings = useApp((s) => s.settings!)
   const update = useApp((s) => s.update)
+  const live = useApp((s) => s.platform?.material === "live")
   const refreshStatus = useApp((s) => s.refreshStatus)
   const [payload, setPayload] = useState<PopupPayload | null>(null)
   const [text, setText] = useState("")
@@ -135,6 +137,7 @@ export function Popup() {
 
   return (
     <div className="window-shell flex flex-col rounded-[inherit]">
+      {live && <LiveBackdrop />}
       <div className="aurora" />
       <div
         ref={headerRef}

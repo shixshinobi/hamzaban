@@ -2,6 +2,7 @@ import {
   BugIcon,
   DownloadIcon,
   GlobeIcon,
+  InfoIcon,
   LogInIcon,
   LogOutIcon,
   MailIcon,
@@ -12,12 +13,19 @@ import {
   SlidersHorizontalIcon,
   Trash2Icon,
 } from "lucide-react"
-import { useState } from "react"
-import { DEFAULT_SHORTCUTS, ENGINE_META } from "@shared/defaults"
+import { useRef, useState } from "react"
+import {
+  APPEARANCE_DEFAULTS,
+  DEFAULT_SHORTCUTS,
+  ENGINE_META,
+} from "@shared/defaults"
 import { APP_VERSION, FEEDBACK } from "@shared/links"
 import type {
+  AccentColor,
+  Backdrop,
   EngineConfig,
   EngineFamily,
+  Settings,
   ShortcutAction,
   ThemePref,
   WindowMaterial,
@@ -25,6 +33,7 @@ import type {
 import { GlassPanel } from "@/components/glass/glass-panel"
 import { Logo } from "@/components/logo"
 import { EngineGlyph, LanguagePicker, StatusDot } from "@/components/pickers"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -48,12 +57,16 @@ import {
 } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Slider } from "@/components/ui/slider"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { hz } from "@/lib/hz"
 import { useT, useUiLang, type StringKey } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
+import { applyAppearance } from "@/lib/theme"
+import { cn } from "@/lib/utils"
 import { EngineDialog, newApiEngine } from "./engine-dialog"
 import { ShortcutRecorder } from "./shortcut-recorder"
 
@@ -80,6 +93,172 @@ function Segmented<T extends string>({
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
+  )
+}
+
+const ACCENTS: { id: AccentColor; key: StringKey; hue: number }[] = [
+  { id: "blue", key: "accentBlue", hue: 262 },
+  { id: "violet", key: "accentViolet", hue: 295 },
+  { id: "pink", key: "accentPink", hue: 350 },
+  { id: "red", key: "accentRed", hue: 22 },
+  { id: "orange", key: "accentOrange", hue: 50 },
+  { id: "green", key: "accentGreen", hue: 150 },
+  { id: "teal", key: "accentTeal", hue: 192 },
+  { id: "graphite", key: "accentGraphite", hue: 265 },
+]
+const swatch = (a: AccentColor) => {
+  const hue = ACCENTS.find((x) => x.id === a)!.hue
+  return `oklch(0.62 ${a === "graphite" ? 0.02 : 0.17} ${hue})`
+}
+
+const BACKDROPS: { id: Backdrop; key: StringKey }[] = [
+  { id: "aurora", key: "backdropAurora" },
+  { id: "orbs", key: "backdropOrbs" },
+  { id: "gradient", key: "backdropGradient" },
+  { id: "grid", key: "backdropGrid" },
+  { id: "plain", key: "backdropPlain" },
+]
+
+/** Ready-made combinations of backdrop, color and glass. */
+const THEMES: {
+  id: string
+  key: StringKey
+  look: Pick<Settings, "backdrop" | "accent" | "transparency" | "blur">
+}[] = [
+  {
+    id: "liquid",
+    key: "themeLiquid",
+    look: { backdrop: "aurora", accent: "blue", transparency: 50, blur: 22 },
+  },
+  {
+    id: "pure",
+    key: "themePure",
+    look: { backdrop: "plain", accent: "blue", transparency: 72, blur: 22 },
+  },
+  {
+    id: "orbs",
+    key: "themeOrbs",
+    look: { backdrop: "orbs", accent: "violet", transparency: 62, blur: 28 },
+  },
+  {
+    id: "sunset",
+    key: "themeSunset",
+    look: {
+      backdrop: "gradient",
+      accent: "orange",
+      transparency: 55,
+      blur: 24,
+    },
+  },
+  {
+    id: "blossom",
+    key: "themeBlossom",
+    look: { backdrop: "orbs", accent: "pink", transparency: 56, blur: 34 },
+  },
+  {
+    id: "grid",
+    key: "themeGrid",
+    look: { backdrop: "grid", accent: "teal", transparency: 64, blur: 10 },
+  },
+  {
+    id: "minimal",
+    key: "themeMinimal",
+    look: { backdrop: "plain", accent: "graphite", transparency: 20, blur: 16 },
+  },
+]
+
+/** A small picture of a backdrop in a given color, for the theme and backdrop pickers. */
+function previewBackground(backdrop: Backdrop, accent: AccentColor) {
+  const h = ACCENTS.find((x) => x.id === accent)!.hue
+  const c = accent === "graphite" ? 0.02 : 0.16
+  const col = (l: number, dh: number, a: number) =>
+    `oklch(${l} ${c} ${h + dh} / ${a})`
+  switch (backdrop) {
+    case "aurora":
+      return `radial-gradient(60% 70% at 20% 25%, ${col(0.78, 0, 0.8)}, transparent 70%), radial-gradient(55% 60% at 85% 35%, ${col(0.82, -65, 0.6)}, transparent 70%), radial-gradient(60% 60% at 60% 95%, ${col(0.8, 58, 0.5)}, transparent 70%)`
+    case "orbs":
+      return `radial-gradient(circle at 25% 30%, ${col(0.72, 0, 0.85)} 0 14px, transparent 15px), radial-gradient(circle at 75% 70%, ${col(0.7, -50, 0.8)} 0 18px, transparent 19px), radial-gradient(circle at 80% 22%, ${col(0.78, 55, 0.75)} 0 8px, transparent 9px)`
+    case "gradient":
+      return `linear-gradient(135deg, ${col(0.78, -40, 0.75)}, ${col(0.74, 0, 0.7)} 45%, ${col(0.8, 50, 0.65)})`
+    case "grid":
+      return `radial-gradient(circle, oklch(0.5 0 0 / 0.35) 1px, transparent 1.4px) 0 0 / 7px 7px, radial-gradient(70% 80% at 85% 10%, ${col(0.8, 0, 0.6)}, transparent 70%)`
+    case "plain":
+      return "var(--muted)"
+  }
+}
+
+/**
+ * A slider that previews while dragging and saves on release, with a tick at the
+ * default value. The track stays left-to-right in both languages, like a gauge.
+ */
+function TuningSlider({
+  value,
+  fallback,
+  min,
+  max,
+  label,
+  unit,
+  onPreview,
+  onCommit,
+}: {
+  value: number
+  fallback: number
+  min: number
+  max: number
+  label: string
+  unit?: string
+  onPreview: (v: number) => void
+  onCommit: (v: number) => void
+}) {
+  const ui = useUiLang()
+  const [draft, setDraft] = useState<number | null>(null)
+  const shown = draft ?? value
+  const pct = (fallback - min) / (max - min)
+  // A detent for the pointer: within 2% of the range (one step on short ranges) the
+  // thumb holds on the default. Arrow keys move one step at a time with no pull, so the
+  // values right beside the default stay reachable.
+  const zone = Math.max(1, Math.round((max - min) * 0.02))
+  const last = useRef(value)
+  const pick = (v: number | readonly number[], reason?: string) => {
+    const n = Array.isArray(v) ? v[0] : (v as number)
+    last.current =
+      reason !== "keyboard" && Math.abs(n - fallback) <= zone ? fallback : n
+    return last.current
+  }
+  const atDefault = shown === fallback
+  return (
+    <div className="flex w-56 items-center gap-3">
+      <div className="relative flex-1" dir="ltr">
+        {/* The thumb stays inside the track, so its centre runs from 6px to 100% - 6px. */}
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors",
+            atDefault ? "bg-primary" : "bg-muted-foreground/50"
+          )}
+          style={{ left: `calc(6px + (100% - 12px) * ${pct})` }}
+        />
+        <Slider
+          value={[shown]}
+          min={min}
+          max={max}
+          aria-label={label}
+          onValueChange={(v, e) => {
+            const n = pick(v, e.reason)
+            setDraft(n)
+            onPreview(n)
+          }}
+          onValueCommitted={() => {
+            setDraft(null)
+            onCommit(last.current)
+          }}
+        />
+      </div>
+      <span className="w-12 shrink-0 text-end text-xs text-muted-foreground tabular-nums">
+        {shown.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")}
+        {unit === "%" && ui === "fa" ? "٪" : unit}
+      </span>
+    </div>
   )
 }
 
@@ -131,9 +310,172 @@ function GeneralSettings() {
                     { value: "mica" as const, label: t("materialMica") },
                   ]
                 : []),
+              { value: "clear", label: t("materialClear") },
+              ...(os === "win32"
+                ? [{ value: "live" as const, label: t("materialLive") }]
+                : []),
               { value: "none", label: t("materialNone") },
             ]}
           />
+        </Field>
+        {s.material === "live" && (
+          <Alert>
+            <InfoIcon />
+            <AlertDescription>{t("materialLiveNote")}</AlertDescription>
+          </Alert>
+        )}
+      </FieldSet>
+      <FieldSeparator />
+      <FieldSet>
+        <FieldLegend>{t("appearance")}</FieldLegend>
+        <Field>
+          <FieldLabel>{t("themes")}</FieldLabel>
+          <div className="grid grid-cols-4 gap-2">
+            {THEMES.map((th) => {
+              const active = (
+                Object.keys(th.look) as (keyof typeof th.look)[]
+              ).every((k) => s[k] === th.look[k])
+              return (
+                <button
+                  key={th.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => void update(th.look)}
+                  className={cn(
+                    "group flex flex-col gap-1.5 rounded-xl p-1.5 text-start text-xs transition outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    active
+                      ? "bg-primary/10 ring-2 ring-primary"
+                      : "ring-1 ring-border hover:bg-accent"
+                  )}
+                >
+                  <span
+                    className="relative flex h-14 items-end overflow-hidden rounded-lg p-1.5"
+                    style={{
+                      background: previewBackground(
+                        th.look.backdrop,
+                        th.look.accent
+                      ),
+                    }}
+                  >
+                    <span
+                      className="h-6 w-3/4 rounded-md ring-1 ring-white/50"
+                      style={{
+                        background: `oklch(1 0 0 / ${(0.65 - th.look.transparency / 220).toFixed(2)})`,
+                        backdropFilter: `blur(${Math.round(th.look.blur / 4)}px)`,
+                      }}
+                    />
+                    <span
+                      className="absolute end-1.5 top-1.5 size-2.5 rounded-full"
+                      style={{ background: swatch(th.look.accent) }}
+                    />
+                  </span>
+                  <span className="px-0.5 font-medium">{t(th.key)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+        <Field orientation="horizontal">
+          <FieldLabel>{t("backdrop")}</FieldLabel>
+          <ToggleGroup
+            value={[s.backdrop]}
+            onValueChange={(v) =>
+              v[0] && void update({ backdrop: v[0] as Backdrop })
+            }
+            size="sm"
+            spacing={1}
+          >
+            {BACKDROPS.map((b) => (
+              <ToggleGroupItem
+                key={b.id}
+                value={b.id}
+                aria-label={t(b.key)}
+                title={t(b.key)}
+                className="h-8 w-10 rounded-lg p-0.5"
+              >
+                <span
+                  className="size-full rounded-md ring-1 ring-border"
+                  style={{ background: previewBackground(b.id, s.accent) }}
+                />
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Field>
+        <Field orientation="horizontal">
+          <FieldLabel>{t("accent")}</FieldLabel>
+          <ToggleGroup
+            value={[s.accent]}
+            onValueChange={(v) =>
+              v[0] && void update({ accent: v[0] as AccentColor })
+            }
+            size="sm"
+            spacing={1}
+          >
+            {ACCENTS.map((a) => (
+              <ToggleGroupItem
+                key={a.id}
+                value={a.id}
+                aria-label={t(a.key)}
+                title={t(a.key)}
+                className="size-7 rounded-full p-0"
+              >
+                <span
+                  className="size-4 rounded-full ring-1 ring-border"
+                  style={{ background: swatch(a.id) }}
+                />
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Field>
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel>{t("transparency")}</FieldLabel>
+            <FieldDescription>{t("transparencyHint")}</FieldDescription>
+          </FieldContent>
+          <TuningSlider
+            label={t("transparency")}
+            value={s.transparency}
+            fallback={APPEARANCE_DEFAULTS.transparency}
+            min={0}
+            max={100}
+            unit="%"
+            onPreview={(transparency) => applyAppearance({ transparency })}
+            onCommit={(transparency) => void update({ transparency })}
+          />
+        </Field>
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel>{t("blur")}</FieldLabel>
+            <FieldDescription>{t("blurHint")}</FieldDescription>
+          </FieldContent>
+          <TuningSlider
+            label={t("blur")}
+            value={s.blur}
+            fallback={APPEARANCE_DEFAULTS.blur}
+            min={0}
+            max={40}
+            onPreview={(blur) => applyAppearance({ blur })}
+            onCommit={(blur) => void update({ blur })}
+          />
+        </Field>
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel>{t("appearanceReset")}</FieldLabel>
+            <FieldDescription>{t("appearanceResetHint")}</FieldDescription>
+          </FieldContent>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={(
+              Object.keys(
+                APPEARANCE_DEFAULTS
+              ) as (keyof typeof APPEARANCE_DEFAULTS)[]
+            ).every((k) => s[k] === APPEARANCE_DEFAULTS[k])}
+            onClick={() => void update({ ...APPEARANCE_DEFAULTS })}
+          >
+            <RotateCcwIcon data-icon="inline-start" />
+            {t("reset")}
+          </Button>
         </Field>
       </FieldSet>
       <FieldSeparator />
@@ -237,6 +579,8 @@ function EngineSettings() {
     engine: EngineConfig
     isNew: boolean
   } | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [signingOut, setSigningOut] = useState<string | null>(null)
   const familyLabel: Record<EngineFamily, string> = {
     free: t("familyFree"),
     web: t("familyWeb"),
@@ -261,8 +605,20 @@ function EngineSettings() {
         <p className="flex-1 text-sm text-muted-foreground">
           {t("enginesHint")}
         </p>
-        <Button size="sm" variant="ghost" onClick={() => void refreshStatus()}>
-          <RefreshCwIcon data-icon="inline-start" />
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={checking}
+          aria-label={t("statusChecking")}
+          onClick={() => {
+            setChecking(true)
+            void refreshStatus().finally(() => setChecking(false))
+          }}
+        >
+          <RefreshCwIcon
+            data-icon="inline-start"
+            className={cn(checking && "animate-spin")}
+          />
         </Button>
         <Button
           size="sm"
@@ -304,13 +660,20 @@ function EngineSettings() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() =>
+                        disabled={signingOut === e.id}
+                        onClick={() => {
+                          setSigningOut(e.id)
                           void hz.engines
                             .logout(e.id)
                             .then(() => refreshStatus(e.id))
-                        }
+                            .finally(() => setSigningOut(null))
+                        }}
                       >
-                        <LogOutIcon data-icon="inline-start" />
+                        {signingOut === e.id ? (
+                          <Spinner data-icon="inline-start" />
+                        ) : (
+                          <LogOutIcon data-icon="inline-start" />
+                        )}
                         {t("signOut")}
                       </Button>
                     ) : null}

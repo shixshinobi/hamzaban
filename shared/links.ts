@@ -1,4 +1,7 @@
-export const APP_VERSION = "0.1.0"
+declare const __APP_VERSION__: string
+
+/** From package.json, filled in at build time (vite.config.ts). */
+export const APP_VERSION = __APP_VERSION__
 
 /**
  * Where feedback goes. An empty value hides that option in Settings → About, so a

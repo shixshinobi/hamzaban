@@ -218,7 +218,9 @@ const runCodex = async (ctx: EngineContext) => {
   if (help.includes("--ephemeral")) args.push("--ephemeral")
   if (help.includes("--ignore-user-config")) args.push("--ignore-user-config")
   if (help.includes("--ignore-rules")) args.push("--ignore-rules")
-  args.push("-c", "model_reasoning_effort=low")
+  // A word or a sentence needs no deliberation; a longer passage with terminology does.
+  const effort = req.text.length > 400 ? "medium" : "low"
+  args.push("-c", `model_reasoning_effort=${effort}`)
   if (engine.model) args.push("-m", engine.model)
   if (req.image) args.push("-i", await ctx.imageFile())
   args.push("-")

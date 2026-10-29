@@ -8,6 +8,9 @@ files:
   - dist/**
   - dist-electron/**
   - package.json
+  # Vite bundles everything the app uses into dist/ and dist-electron/; the main process
+  # loads nothing from node_modules, so shipping it only adds ~200 MB.
+  - "!node_modules/**"
 extraResources:
   - from: build
     to: .
@@ -15,24 +18,40 @@ extraResources:
       - "*.png"
       - "*.ico"
 asar: true
+# Chromium's own UI strings (menus, dialogs) only in the app's two languages.
+electronLanguages: [en-US, fa]
+# Releases are published by .github/workflows/release.yml, not by electron-builder.
+publish: null
 win:
   target:
+    # ARM PCs get their own installer (release.yml builds it with --arm64), so nobody
+    # downloads both builds in one file.
     - target: nsis
-      arch: [x64, arm64]
+      arch: [x64]
     - target: portable
       arch: [x64]
   icon: build/icon.ico
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
 nsis:
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   shortcutName: Hamzaban
+dmg:
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
 mac:
   target:
     - target: dmg
       arch: [arm64, x64]
   category: public.app-category.productivity
   icon: build/icon.png
+  # No Apple Developer ID yet: an ad-hoc signature is the least an Apple Silicon Mac
+  # needs to start the app at all. Users still confirm the first launch (see README).
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
   extendInfo:
     NSAppleEventsUsageDescription: Hamzaban sends Copy/Paste keystrokes to read and replace the selected text.
     NSScreenCaptureUsageDescription: Hamzaban captures the region of the screen you select to translate it.
@@ -45,3 +64,4 @@ linux:
   icon: build/icon.png
   synopsis: Liquid-glass desktop translator
   executableName: hamzaban
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}

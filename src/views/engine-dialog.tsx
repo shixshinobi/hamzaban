@@ -2,7 +2,13 @@ import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { API_PRESETS, ENGINE_META } from "@shared/defaults"
-import { bestGeminiModel, isGeminiApi } from "@shared/models"
+import {
+  bestGeminiModel,
+  isGeminiApi,
+  modelNote,
+  translationModels,
+  type ModelNote,
+} from "@shared/models"
 import type { EngineConfig } from "@shared/types"
 import { Button } from "@/components/ui/button"
 import {
@@ -49,7 +55,13 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { hz } from "@/lib/hz"
-import { useT, useUiLang } from "@/lib/i18n"
+import { useT, useUiLang, type StringKey } from "@/lib/i18n"
+
+const NOTE_LABEL: Record<ModelNote, StringKey> = {
+  best: "modelBest",
+  recommended: "modelRecommended",
+  fast: "modelFast",
+}
 
 export function newApiEngine(presetId = "openai"): EngineConfig {
   const p = API_PRESETS.find((x) => x.id === presetId) ?? API_PRESETS[0]
@@ -91,11 +103,15 @@ export function EngineDialog({
   const fetchModels = async () => {
     setLoading(true)
     try {
-      const list = await hz.engines.models(draft.id, {
-        baseUrl: draft.baseUrl,
-        apiKey: draft.apiKey,
-        kind: draft.kind,
-      })
+      // Only models that can translate, best first (no image, speech or embedding models).
+      const list = translationModels(
+        await hz.engines.models(draft.id, {
+          baseUrl: draft.baseUrl,
+          apiKey: draft.apiKey,
+          kind: draft.kind,
+        }),
+        draft.baseUrl
+      )
       setModels(list)
       // For Gemini, move to the strongest text model this key can use.
       const best = isGeminiApi(draft.baseUrl) ? bestGeminiModel(list) : null
@@ -272,6 +288,11 @@ export function EngineDialog({
                             >
                               {m}
                             </span>
+                            {modelNote(m) && (
+                              <span className="ms-auto shrink-0 text-xs text-muted-foreground">
+                                {t(NOTE_LABEL[modelNote(m)!])}
+                              </span>
+                            )}
                           </CommandItem>
                         ))}
                       </CommandGroup>

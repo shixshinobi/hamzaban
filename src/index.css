@@ -59,14 +59,20 @@
   --app-font: "Vazirmatn Variable", "Geist Variable", system-ui, sans-serif;
   --radius: 0.75rem;
 
+  /* Accent: one hue drives the primary color, focus ring and the aurora behind the glass. */
+  --hue: 262;
+  --chroma: 0.19;
+  /* Glass opacity factor from the transparency setting: 1 is the designed look. */
+  --surface-o: 1;
+
   /* Text and controls are tuned for translucent surfaces: slightly cool neutrals. */
   --background: oklch(0.975 0.004 260);
   --foreground: oklch(0.22 0.012 265);
-  --card: oklch(1 0 0 / 0.58);
+  --card: oklch(1 0 0 / min(1, calc(0.58 * var(--surface-o))));
   --card-foreground: var(--foreground);
   --popover: oklch(0.995 0.002 260 / 0.9);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.56 0.19 262);
+  --primary: oklch(0.56 var(--chroma) var(--hue));
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(1 0 0 / 0.62);
   --secondary-foreground: var(--foreground);
@@ -79,13 +85,13 @@
   --warning: oklch(0.72 0.15 75);
   --border: oklch(0.3 0.02 265 / 0.1);
   --input: oklch(0.3 0.02 265 / 0.13);
-  --ring: oklch(0.56 0.19 262 / 0.6);
+  --ring: oklch(0.56 var(--chroma) var(--hue) / 0.6);
   --chart-1: oklch(0.65 0.17 262);
   --chart-2: oklch(0.7 0.13 200);
   --chart-3: oklch(0.7 0.15 320);
   --chart-4: oklch(0.75 0.14 75);
   --chart-5: oklch(0.65 0.15 155);
-  --sidebar: oklch(1 0 0 / 0.4);
+  --sidebar: oklch(1 0 0 / min(1, calc(0.4 * var(--surface-o))));
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
@@ -95,26 +101,61 @@
   --sidebar-ring: var(--ring);
 
   /* Glass recipe */
-  --glass-tint: oklch(1 0 0 / 0.5);
-  --glass-tint-strong: oklch(1 0 0 / 0.74);
+  --glass-tint: oklch(1 0 0 / min(1, calc(0.5 * var(--surface-o))));
+  --glass-tint-strong: oklch(1 0 0 / min(1, calc(0.74 * var(--surface-o))));
   --glass-highlight: oklch(1 0 0 / 0.9);
   --glass-lowlight: oklch(1 0 0 / 0.25);
   --glass-stroke: oklch(0.25 0.02 265 / 0.08);
-  --glass-shadow: 0 1px 1px oklch(0.2 0.02 265 / 0.04), 0 10px 30px -12px oklch(0.25 0.04 265 / 0.22);
-  --glass-rim: linear-gradient(150deg, oklch(1 0 0 / 0.95), oklch(1 0 0 / 0.15) 32%, oklch(1 0 0 / 0) 55%, oklch(1 0 0 / 0.45));
+  --glass-shadow:
+    0 1px 1px oklch(0.2 0.02 265 / 0.04),
+    0 10px 30px -12px oklch(0.25 0.04 265 / 0.22);
+  --glass-rim: linear-gradient(
+    150deg,
+    oklch(1 0 0 / 0.95),
+    oklch(1 0 0 / 0.15) 32%,
+    oklch(1 0 0 / 0) 55%,
+    oklch(1 0 0 / 0.45)
+  );
   --glass-blur: 22px;
-  --aurora-a: oklch(0.78 0.12 255 / 0.55);
-  --aurora-b: oklch(0.82 0.1 195 / 0.45);
-  --aurora-c: oklch(0.8 0.1 320 / 0.35);
-  --window-fill: oklch(0.97 0.006 260 / 0.42);
+  --aurora-a: oklch(0.78 calc(var(--chroma) * 0.63) var(--hue) / 0.55);
+  --aurora-b: oklch(
+    0.82 calc(var(--chroma) * 0.53) calc(var(--hue) - 65) / 0.45
+  );
+  --aurora-c: oklch(
+    0.8 calc(var(--chroma) * 0.53) calc(var(--hue) + 58) / 0.35
+  );
+  --window-fill: oklch(0.97 0.006 260 / min(1, calc(0.42 * var(--surface-o))));
+}
+
+html[data-accent="violet"] {
+  --hue: 295;
+}
+html[data-accent="pink"] {
+  --hue: 350;
+}
+html[data-accent="red"] {
+  --hue: 22;
+}
+html[data-accent="orange"] {
+  --hue: 50;
+}
+html[data-accent="green"] {
+  --hue: 150;
+}
+html[data-accent="teal"] {
+  --hue: 192;
+}
+html[data-accent="graphite"] {
+  --hue: 265;
+  --chroma: 0.025;
 }
 
 .dark {
   --background: oklch(0.17 0.008 265);
   --foreground: oklch(0.96 0.004 265);
-  --card: oklch(0.3 0.012 265 / 0.42);
+  --card: oklch(0.3 0.012 265 / min(1, calc(0.42 * var(--surface-o))));
   --popover: oklch(0.23 0.012 265 / 0.92);
-  --primary: oklch(0.72 0.15 258);
+  --primary: oklch(0.72 calc(var(--chroma) * 0.8) var(--hue));
   --primary-foreground: oklch(0.16 0.02 265);
   --secondary: oklch(1 0 0 / 0.08);
   --muted: oklch(1 0 0 / 0.06);
@@ -125,20 +166,33 @@
   --warning: oklch(0.82 0.14 80);
   --border: oklch(1 0 0 / 0.09);
   --input: oklch(1 0 0 / 0.13);
-  --ring: oklch(0.72 0.15 258 / 0.55);
-  --sidebar: oklch(0.25 0.01 265 / 0.35);
+  --ring: oklch(0.72 calc(var(--chroma) * 0.8) var(--hue) / 0.55);
+  --sidebar: oklch(0.25 0.01 265 / min(1, calc(0.35 * var(--surface-o))));
 
-  --glass-tint: oklch(0.32 0.012 265 / 0.36);
-  --glass-tint-strong: oklch(0.26 0.012 265 / 0.72);
+  --glass-tint: oklch(0.32 0.012 265 / min(1, calc(0.36 * var(--surface-o))));
+  --glass-tint-strong: oklch(
+    0.26 0.012 265 / min(1, calc(0.72 * var(--surface-o)))
+  );
   --glass-highlight: oklch(1 0 0 / 0.2);
   --glass-lowlight: oklch(1 0 0 / 0.04);
   --glass-stroke: oklch(1 0 0 / 0.07);
-  --glass-shadow: 0 1px 1px oklch(0 0 0 / 0.2), 0 14px 36px -14px oklch(0 0 0 / 0.6);
-  --glass-rim: linear-gradient(150deg, oklch(1 0 0 / 0.34), oklch(1 0 0 / 0.05) 30%, oklch(1 0 0 / 0) 55%, oklch(1 0 0 / 0.14));
-  --aurora-a: oklch(0.5 0.16 260 / 0.45);
-  --aurora-b: oklch(0.55 0.12 200 / 0.3);
-  --aurora-c: oklch(0.5 0.15 320 / 0.28);
-  --window-fill: oklch(0.16 0.01 265 / 0.38);
+  --glass-shadow:
+    0 1px 1px oklch(0 0 0 / 0.2), 0 14px 36px -14px oklch(0 0 0 / 0.6);
+  --glass-rim: linear-gradient(
+    150deg,
+    oklch(1 0 0 / 0.34),
+    oklch(1 0 0 / 0.05) 30%,
+    oklch(1 0 0 / 0) 55%,
+    oklch(1 0 0 / 0.14)
+  );
+  --aurora-a: oklch(0.5 calc(var(--chroma) * 0.84) var(--hue) / 0.45);
+  --aurora-b: oklch(
+    0.55 calc(var(--chroma) * 0.63) calc(var(--hue) - 62) / 0.3
+  );
+  --aurora-c: oklch(
+    0.5 calc(var(--chroma) * 0.79) calc(var(--hue) + 58) / 0.28
+  );
+  --window-fill: oklch(0.16 0.01 265 / min(1, calc(0.38 * var(--surface-o))));
 }
 
 html[lang="en"] {
@@ -151,6 +205,46 @@ html[data-material="none"] {
 }
 html[data-material="none"].dark {
   --window-fill: oklch(0.165 0.01 265 / 0.97);
+}
+/* Clear window: whatever is behind it shows unblurred; the transparency setting decides
+   how much of it comes through. A little more tint than the OS materials keeps text
+   readable over busy content. */
+html[data-material="clear"] {
+  --window-fill: oklch(0.97 0.006 260 / min(1, calc(0.55 * var(--surface-o))));
+}
+html[data-material="clear"].dark {
+  --window-fill: oklch(0.16 0.01 265 / min(1, calc(0.5 * var(--surface-o))));
+}
+/* Live blur: the window paints a blurred live copy of the screen behind it, then the
+   usual tint on top of that; the shell itself stays clear. */
+html[data-material="live"] {
+  --window-fill: oklch(0.97 0.006 260 / min(1, calc(0.45 * var(--surface-o))));
+}
+html[data-material="live"].dark {
+  --window-fill: oklch(0.16 0.01 265 / min(1, calc(0.42 * var(--surface-o))));
+}
+html[data-material="live"] .window-shell {
+  background: transparent;
+}
+.live-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.live-backdrop video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  filter: blur(var(--glass-blur)) saturate(1.3);
+}
+.live-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--window-fill);
 }
 
 @layer base {
@@ -221,17 +315,103 @@ html[data-material="none"].dark {
       radial-gradient(38% 42% at 18% 22%, var(--aurora-a), transparent 70%),
       radial-gradient(34% 38% at 82% 30%, var(--aurora-b), transparent 70%),
       radial-gradient(40% 40% at 60% 88%, var(--aurora-c), transparent 70%);
-    filter: blur(30px) saturate(120%);
+    /* The background layer carries the blur setting itself: in a transparent (acrylic)
+       window the panels' backdrop-filter cannot hide the sharp shapes beneath them. */
+    --backdrop-blur: calc(var(--glass-blur) * 1.4);
+    --backdrop-tone: saturate(1.2);
+    filter: blur(var(--backdrop-blur)) var(--backdrop-tone);
     animation: aurora-drift 38s ease-in-out infinite alternate;
   }
   html[data-material="acrylic"] .aurora,
-  html[data-material="vibrancy"] .aurora {
+  html[data-material="vibrancy"] .aurora,
+  html[data-material="clear"] .aurora,
+  html[data-material="live"] .aurora {
     opacity: 0.55;
+  }
+
+  /* Backdrops: what sits behind the glass. Shapes with edges make the blur and
+     transparency settings visible; the soft aurora barely changes under blur. */
+  html[data-backdrop="orbs"] .aurora {
+    inset: -6%;
+    background:
+      radial-gradient(
+        circle at 20% 26%,
+        oklch(0.72 calc(var(--chroma) * 0.9) var(--hue) / 0.75) 0 11vmin,
+        transparent calc(11vmin + 1.5px)
+      ),
+      radial-gradient(
+        circle at 78% 22%,
+        oklch(0.78 calc(var(--chroma) * 0.7) calc(var(--hue) + 55) / 0.65) 0
+          7vmin,
+        transparent calc(7vmin + 1.5px)
+      ),
+      radial-gradient(
+        circle at 66% 78%,
+        oklch(0.7 calc(var(--chroma) * 0.8) calc(var(--hue) - 50) / 0.7) 0
+          14vmin,
+        transparent calc(14vmin + 1.5px)
+      ),
+      radial-gradient(
+        circle at 34% 84%,
+        oklch(0.82 calc(var(--chroma) * 0.5) calc(var(--hue) + 110) / 0.6) 0
+          5vmin,
+        transparent calc(5vmin + 1.5px)
+      ),
+      radial-gradient(
+        circle at 90% 60%,
+        oklch(0.8 calc(var(--chroma) * 0.6) var(--hue) / 0.55) 0 4vmin,
+        transparent calc(4vmin + 1.5px)
+      );
+    --backdrop-blur: calc(var(--glass-blur) * 0.45);
+    --backdrop-tone: saturate(1);
+    animation-duration: 60s;
+  }
+  html[data-backdrop="gradient"] .aurora {
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      oklch(0.78 calc(var(--chroma) * 0.7) calc(var(--hue) - 40) / 0.6),
+      oklch(0.74 calc(var(--chroma) * 0.8) var(--hue) / 0.55) 45%,
+      oklch(0.8 calc(var(--chroma) * 0.6) calc(var(--hue) + 50) / 0.5)
+    );
+    --backdrop-blur: 0px;
+    --backdrop-tone: saturate(1);
+    animation: none;
+  }
+  html[data-backdrop="grid"] .aurora {
+    inset: 0;
+    background:
+      radial-gradient(
+          circle,
+          color-mix(in oklch, var(--foreground) 22%, transparent) 1.2px,
+          transparent 1.6px
+        )
+        0 0 / 18px 18px,
+      radial-gradient(
+        60% 70% at 85% 10%,
+        oklch(0.8 calc(var(--chroma) * 0.6) var(--hue) / 0.45),
+        transparent 70%
+      );
+    --backdrop-blur: calc(var(--glass-blur) * 0.07);
+    --backdrop-tone: saturate(1);
+    animation: none;
+  }
+  html[data-backdrop="plain"] .aurora {
+    display: none;
+  }
+  .dark[data-backdrop="orbs"] .aurora,
+  .dark[data-backdrop="gradient"] .aurora,
+  .dark[data-backdrop="grid"] .aurora {
+    --backdrop-tone: brightness(0.55) saturate(1.1);
   }
 
   .glass {
     position: relative;
-    background: linear-gradient(180deg, var(--glass-tint), color-mix(in oklch, var(--glass-tint) 70%, transparent));
+    background: linear-gradient(
+      180deg,
+      var(--glass-tint),
+      color-mix(in oklch, var(--glass-tint) 70%, transparent)
+    );
     backdrop-filter: blur(var(--glass-blur)) saturate(180%);
     box-shadow:
       inset 0 1px 0 0 var(--glass-highlight),
@@ -255,6 +435,38 @@ html[data-material="none"].dark {
   .glass-strong {
     --glass-tint: var(--glass-tint-strong);
   }
+  /* Pure glass: with nothing drawn behind, the panels themselves carry the effect,
+     with a brighter rim and top specular and a soft inner glow on the upper edge. */
+  html[data-backdrop="plain"] .glass {
+    --glass-rim: linear-gradient(
+      160deg,
+      oklch(1 0 0 / 1),
+      oklch(1 0 0 / 0.3) 28%,
+      oklch(1 0 0 / 0) 52%,
+      oklch(1 0 0 / 0.55)
+    );
+    box-shadow:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.95),
+      inset 0 -1px 1px 0 oklch(1 0 0 / 0.35),
+      inset 0 14px 28px -18px oklch(1 0 0 / 0.55),
+      inset 0 0 0 1px var(--glass-stroke),
+      var(--glass-shadow);
+  }
+  .dark[data-backdrop="plain"] .glass {
+    --glass-rim: linear-gradient(
+      160deg,
+      oklch(1 0 0 / 0.45),
+      oklch(1 0 0 / 0.1) 28%,
+      oklch(1 0 0 / 0) 52%,
+      oklch(1 0 0 / 0.22)
+    );
+    box-shadow:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.28),
+      inset 0 -1px 1px 0 oklch(1 0 0 / 0.08),
+      inset 0 14px 28px -18px oklch(1 0 0 / 0.16),
+      inset 0 0 0 1px var(--glass-stroke),
+      var(--glass-shadow);
+  }
   .glass-flat {
     background: var(--glass-tint);
     box-shadow:
@@ -269,7 +481,11 @@ html[data-material="none"].dark {
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    background: radial-gradient(220px circle at var(--mx, 30%) var(--my, -20%), oklch(1 0 0 / 0.16), transparent 60%);
+    background: radial-gradient(
+      220px circle at var(--mx, 30%) var(--my, -20%),
+      oklch(1 0 0 / 0.16),
+      transparent 60%
+    );
     opacity: 0;
     transition: opacity 300ms ease;
   }
@@ -306,12 +522,34 @@ html[data-material="none"].dark {
   }
 
   .shimmer-text {
-    background: linear-gradient(90deg, var(--muted-foreground) 0%, var(--foreground) 50%, var(--muted-foreground) 100%);
+    background: linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 100%
+    );
     background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
     animation: shimmer 1.6s linear infinite;
+  }
+
+  /* An activity bar for waits of unknown length: a short segment sweeping across. */
+  .indeterminate {
+    position: relative;
+  }
+  .indeterminate::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    width: 35%;
+    border-radius: inherit;
+    background: var(--primary);
+    animation: indeterminate 1.4s ease-in-out infinite;
+  }
+  [dir="rtl"] .indeterminate::after {
+    animation-direction: reverse;
   }
 
   .caret::after {
@@ -364,6 +602,14 @@ html[data-material="none"].dark {
     background-position: -200% 0;
   }
 }
+@keyframes indeterminate {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
 @keyframes caret {
   50% {
     opacity: 0;
@@ -373,7 +619,8 @@ html[data-material="none"].dark {
 @media (prefers-reduced-motion: reduce) {
   .aurora,
   .shimmer-text,
-  .caret::after {
+  .caret::after,
+  .indeterminate::after {
     animation: none;
   }
 }

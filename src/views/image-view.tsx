@@ -26,13 +26,23 @@ import {
 } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Spinner } from "@/components/ui/spinner"
 import { hz } from "@/lib/hz"
 import { useT } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
 import { useTranslator } from "@/lib/use-translator"
 import { cn } from "@/lib/utils"
 
-function fileToDataUrl(file: File) {
+const IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+  bmp: "image/bmp",
+}
+
+function fileToDataUrl(file: Blob) {
   return new Promise<string>((resolve, reject) => {
     const r = new FileReader()
     r.onload = () => resolve(r.result as string)
@@ -48,7 +58,7 @@ export function ImageView() {
   const setPending = useApp((s) => s.setPending)
   const [image, setImage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [picking, setPicking] = useState(false)
   const { state, ocr, translate, retry, cancel, clear } = useTranslator()
   const model = useResultModel(state)
 
@@ -71,6 +81,8 @@ export function ImageView() {
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      // The page stays mounted while others are open; only take pastes when it is shown.
+      if (useApp.getState().route !== "image") return
       const file = [...(e.clipboardData?.files ?? [])].find((f) =>
         f.type.startsWith("image/")
       )
@@ -83,6 +95,23 @@ export function ImageView() {
   const onFiles = async (files: FileList | null) => {
     const file = [...(files ?? [])].find((f) => f.type.startsWith("image/"))
     if (file) load(await fileToDataUrl(file))
+  }
+
+  const chooseFile = async () => {
+    setPicking(true)
+    try {
+      const f = await hz.file.readBinary([
+        { name: t("imageFiles"), extensions: Object.keys(IMAGE_TYPES) },
+      ])
+      if (!f) return
+      const ext = f.name.split(".").pop()?.toLowerCase() ?? ""
+      const blob = new Blob([f.data as BlobPart], {
+        type: IMAGE_TYPES[ext] ?? "image/png",
+      })
+      load(await fileToDataUrl(blob))
+    } finally {
+      setPicking(false)
+    }
   }
 
   // Translate the same image again when the engine, language or style changes.
@@ -123,13 +152,6 @@ export function ImageView() {
       }}
     >
       <TranslateToolbar detected={state.detected} />
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => void onFiles(e.target.files)}
-      />
 
       {!image ? (
         <GlassPanel
@@ -163,16 +185,23 @@ export function ImageView() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => fileRef.current?.click()}
+                disabled={picking}
+                onClick={() => void chooseFile()}
               >
-                <ImageUpIcon data-icon="inline-start" />
+                {picking ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <ImageUpIcon data-icon="inline-start" />
+                )}
                 {t("chooseFile")}
               </Button>
             </EmptyContent>
           </Empty>
         </GlassPanel>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-3">
+        // The row must be capped at the available height, or a long result stretches the
+        // panel past the window instead of scrolling inside it.
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] grid-rows-[minmax(0,1fr)] gap-3">
           <GlassPanel className="relative flex min-h-0 flex-col overflow-hidden">
             <div className="flex h-11 shrink-0 items-center gap-1 px-3">
               <Button
