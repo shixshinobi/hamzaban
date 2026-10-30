@@ -191,6 +191,26 @@ const STRINGS = {
   ],
   sideBySide: ["کنار هم", "Side by side"],
   translationOnly: ["فقط ترجمه", "Translation only"],
+  layoutView: ["مثل فایل اصلی", "As the original"],
+  textView: ["متن", "Text"],
+  layoutReading: ["خواندن چیدمان صفحه", "Reading the page layout"],
+  layoutNoText: [
+    "متنی برای ترجمه در این صفحه پیدا نشد.",
+    "No text to translate was found on this page.",
+  ],
+  layoutHint: [
+    "ترجمه درست جای متن اصلی روی همان صفحه می‌نشیند. نشانگر را روی هر بخش نگه دارید تا متن اصلی‌اش را ببینید.",
+    "Each translation sits right where the original text was. Hover over a part to see its original.",
+  ],
+  originalPage: ["اصل", "Original"],
+  translatedPage: ["ترجمه", "Translation"],
+  exportLayoutHtml: [
+    "صفحه‌ی وب با چیدمان اصلی (.html)",
+    "Web page, original layout (.html)",
+  ],
+  exportLayoutPdf: ["PDF با چیدمان اصلی", "PDF, original layout"],
+  exportLayoutPng: ["تصویر (.png)", "Image (.png)"],
+  exportSaved: ["ذخیره شد", "Saved"],
 
   stylesTitle: ["سبک‌ها و اسکیل‌ها", "Styles & skills"],
   stylesHint: [

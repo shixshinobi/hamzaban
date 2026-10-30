@@ -15,6 +15,7 @@ import { toast } from "sonner"
 import { isRtl, languageName } from "@shared/languages"
 import type { ErrorCode } from "@shared/types"
 import { GlassPanel } from "@/components/glass/glass-panel"
+import { LayoutCanvas } from "@/components/layout/layout-canvas"
 import { Markdown } from "@/components/result/blocks"
 import {
   ErrorDetail,
@@ -30,6 +31,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -47,6 +49,9 @@ import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { hz } from "@/lib/hz"
 import { useT, useUiLang } from "@/lib/i18n"
+import { pdfLayout, releaseLayout, type LayoutPage } from "@/lib/layout"
+import { layoutHtml } from "@/lib/layout-export"
+import { translatePieces } from "@/lib/layout-translate"
 import { recognize } from "@/lib/ocr"
 import { openPdf, pageText, renderPage, type PDFDocumentProxy } from "@/lib/pdf"
 import { buildRequest } from "@/lib/request"
@@ -63,7 +68,19 @@ interface PageState {
   /** "partial": stopped with some chunks translated. */
   status: "idle" | "ocr" | "working" | "partial" | "done" | "error"
   error?: { message: string; code?: ErrorCode }
+  /** The same page translated in place, for the "as the original" view. */
+  layout?: LayoutState
 }
+
+interface LayoutState {
+  page?: LayoutPage
+  /** One per region; null until it is translated. */
+  tr: (string | null)[]
+  status: "reading" | "ocr" | "working" | "partial" | "done" | "error"
+  error?: { message: string; code?: ErrorCode }
+}
+
+type View = "side" | "only" | "layout"
 
 /** Errors that end a whole-document run instead of moving on to the next page. */
 const STOP_ON: ErrorCode[] = [
@@ -88,7 +105,15 @@ function splitChunks(text: string, max = 2500) {
   return chunks
 }
 
-function PageThumb({ doc, n }: { doc: PDFDocumentProxy; n: number }) {
+function PageThumb({
+  doc,
+  n,
+  width = 380,
+}: {
+  doc: PDFDocumentProxy
+  n: number
+  width?: number
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
   useEffect(() => {
@@ -105,7 +130,7 @@ function PageThumb({ doc, n }: { doc: PDFDocumentProxy; n: number }) {
     if (!visible || !ref.current) return
     let cancelled = false
     void doc.getPage(n).then(async (page) => {
-      const canvas = await renderPage(page, 380)
+      const canvas = await renderPage(page, width)
       if (cancelled || !ref.current) return
       canvas.className =
         "w-full h-auto rounded-lg bg-white shadow-md ring-1 ring-black/5"
@@ -114,11 +139,110 @@ function PageThumb({ doc, n }: { doc: PDFDocumentProxy; n: number }) {
     return () => {
       cancelled = true
     }
-  }, [visible, doc, n])
+  }, [visible, doc, n, width])
   return (
     <div ref={ref} className="w-full">
       <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
     </div>
+  )
+}
+
+/** A page in the "as the original" view: the original beside its in-place translation. */
+function LayoutCard({
+  doc,
+  p,
+  lang,
+  running,
+  onTranslate,
+}: {
+  doc: PDFDocumentProxy
+  p: PageState
+  lang: string
+  running: boolean
+  onTranslate: () => void
+}) {
+  const t = useT()
+  const ui = useUiLang()
+  const lay = p.layout
+  const busy =
+    lay?.status === "reading" ||
+    lay?.status === "ocr" ||
+    lay?.status === "working"
+  const total = lay?.page?.regions.length ?? 0
+  const count = lay?.tr.filter(Boolean).length ?? 0
+  const num = (v: number) => v.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")
+  return (
+    <GlassPanel className="flex flex-col gap-3 p-4">
+      <div className="flex items-center gap-2">
+        <Badge variant="outline">
+          {t("page")} {num(p.n)}
+        </Badge>
+        {busy && <Spinner className="size-3.5" />}
+        {lay?.status === "reading" && (
+          <span className="shimmer-text text-xs">{t("layoutReading")}</span>
+        )}
+        {lay?.status === "ocr" && (
+          <span className="shimmer-text text-xs">{t("ocrRunning")}</span>
+        )}
+        {lay?.status === "working" && total > 0 && (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {num(count)}/{num(total)}
+          </span>
+        )}
+        {lay?.status === "done" && total > 0 && (
+          <CheckIcon className="size-3.5 text-success" />
+        )}
+        {lay?.status === "partial" && (
+          <Badge variant="secondary">
+            <PauseIcon data-icon="inline-start" />
+            {t("pagePartial")}
+          </Badge>
+        )}
+        {lay?.status === "error" && (
+          <TriangleAlertIcon className="size-3.5 text-destructive" />
+        )}
+        <div className="flex-1" />
+        {!running && !busy && (
+          <Button size="xs" variant="ghost" onClick={onTranslate}>
+            <LanguagesIcon data-icon="inline-start" />
+            {t("translatePage")}
+          </Button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {t("originalPage")}
+          </span>
+          {lay?.page ? (
+            <LayoutCanvas page={lay.page} tr={[]} lang={lang} />
+          ) : (
+            <PageThumb doc={doc} n={p.n} width={720} />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {t("translatedPage")}
+          </span>
+          {lay?.status === "error" && lay.error && (
+            <PageError error={lay.error} />
+          )}
+          {lay?.page ? (
+            total ? (
+              <LayoutCanvas page={lay.page} tr={lay.tr} lang={lang} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t("layoutNoText")}
+              </p>
+            )
+          ) : busy ? (
+            <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("layoutHint")}</p>
+          )}
+        </div>
+      </div>
+    </GlassPanel>
   )
 }
 
@@ -181,7 +305,7 @@ export function PdfView() {
   const [name, setName] = useState("")
   const [pages, setPages] = useState<PageState[]>([])
   const [running, setRunning] = useState(false)
-  const [view, setView] = useState<"side" | "only">("side")
+  const [view, setView] = useState<View>("side")
   const [dragOver, setDragOver] = useState(false)
   /** The file being picked or opened, for the loading state. */
   const [opening, setOpening] = useState<string | null>(null)
@@ -215,6 +339,7 @@ export function PdfView() {
       return
     }
     if (id !== loadId.current) return
+    for (const p of pagesRef.current) releaseLayout(p.layout?.page)
     setDoc(d)
     setName(name)
     setExtracted(0)
@@ -334,18 +459,75 @@ export function PdfView() {
     [doc, settings]
   )
 
+  const patchLayout = (n: number, p: Partial<LayoutState>) => {
+    const cur = pagesRef.current.find((x) => x.n === n)?.layout
+    patch(n, { layout: { tr: [], status: "reading", ...cur, ...p } })
+  }
+
+  /** Translates one page in place, keeping its layout. Returns the error that stopped it. */
+  const translateLayout = useCallback(
+    async (n: number, signal: AbortSignal) => {
+      if (!doc) return
+      let page = pagesRef.current.find((x) => x.n === n)?.layout?.page
+      try {
+        if (!page) {
+          patchLayout(n, { status: "reading", error: undefined })
+          page = await pdfLayout(
+            await doc.getPage(n),
+            settings.sourceLang,
+            () => patchLayout(n, { status: "ocr" })
+          )
+          patchLayout(n, { page, tr: page.regions.map(() => null) })
+        }
+        if (signal.aborted) return patchLayout(n, { status: "partial" })
+        const prev = pagesRef.current.find((x) => x.n === n)!.layout!
+        // A finished page asked for again starts over; a stopped one picks up where it was.
+        let tr = prev.status === "done" ? page.regions.map(() => null) : prev.tr
+        patchLayout(n, { status: "working", tr, error: undefined })
+        await translatePieces(
+          page.regions.map((r) => r.text),
+          tr,
+          settings,
+          (i, text) => {
+            tr = tr.map((x, k) => (k === i ? text : x))
+            patchLayout(n, { tr })
+          },
+          signal
+        )
+        patchLayout(n, { status: "done" })
+      } catch (e) {
+        const err = e as Error & { code?: ErrorCode }
+        if (signal.aborted) return patchLayout(n, { status: "partial" })
+        patchLayout(n, {
+          status: "error",
+          error: { message: err.message, code: err.code },
+        })
+        return err
+      }
+    },
+    // patchLayout only touches refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc, settings]
+  )
+
   /** Translates the given pages in order, or every unfinished page. */
   const run = async (only?: number) => {
     abortRef.current?.abort()
     const ac = new AbortController()
     abortRef.current = ac
     setRunning(true)
+    const inPlace = view === "layout"
     const todo = only
       ? [only]
-      : pagesRef.current.filter((p) => p.status !== "done").map((p) => p.n)
+      : pagesRef.current
+          .filter((p) => (inPlace ? p.layout?.status : p.status) !== "done")
+          .map((p) => p.n)
     for (const n of todo) {
       if (ac.signal.aborted) break
-      const err = await translatePage(n, ac.signal)
+      const err = await (inPlace ? translateLayout : translatePage)(
+        n,
+        ac.signal
+      )
       // These fail the same way on every page: going on only burns more of the quota.
       if (err?.code && STOP_ON.includes(err.code)) {
         toast.error(t("pdfStopped"), { description: t(errorTitle(err.code)) })
@@ -362,9 +544,42 @@ export function PdfView() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  const doneCount = pages.filter((p) => p.status === "done").length
-  const started = pages.some((p) => p.status === "partial" || p.parts.length)
+  const inPlace = view === "layout"
+  const doneCount = pages.filter(
+    (p) => (inPlace ? p.layout?.status : p.status) === "done"
+  ).length
+  const started = inPlace
+    ? pages.some((p) => p.layout?.tr.some(Boolean))
+    : pages.some((p) => p.status === "partial" || p.parts.length)
+  const laidOut = pages.filter((p) => p.layout?.tr.some(Boolean))
   const dir = isRtl(settings.targetLang) ? "rtl" : "ltr"
+
+  const [exporting, setExporting] = useState(false)
+  const saveLayout = async (format: "html" | "pdf") => {
+    setExporting(true)
+    try {
+      const base = name.replace(/\.pdf$/i, "")
+      const out = await layoutHtml(
+        laidOut.map((p) => ({ page: p.layout!.page!, tr: p.layout!.tr })),
+        settings.targetLang,
+        base
+      )
+      const file = `${base}.${settings.targetLang}.${format}`
+      const saved =
+        format === "html"
+          ? await hz.file.save({
+              name: file,
+              content: out.html,
+              filters: [{ name: "HTML", extensions: ["html"] }],
+            })
+          : await hz.file.saveRendered({ name: file, format, ...out })
+      if (saved) toast.success(t("exportSaved"), { description: saved })
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const save = async (format: "md" | "html" | "txt") => {
     const out = exportDoc(pages, name, format, settings.targetLang)
@@ -470,7 +685,7 @@ export function PdfView() {
             <div className="flex-1" />
             <ToggleGroup
               value={[view]}
-              onValueChange={(v) => v[0] && setView(v[0] as "side" | "only")}
+              onValueChange={(v) => v[0] && setView(v[0] as View)}
               size="sm"
               variant="outline"
               spacing={0}
@@ -478,6 +693,9 @@ export function PdfView() {
               <ToggleGroupItem value="side">{t("sideBySide")}</ToggleGroupItem>
               <ToggleGroupItem value="only">
                 {t("translationOnly")}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="layout">
+                {t("layoutView")}
               </ToggleGroupItem>
             </ToggleGroup>
             {running ? (
@@ -498,24 +716,50 @@ export function PdfView() {
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button size="sm" variant="outline" disabled={!doneCount} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      exporting ||
+                      (!pages.some((p) => p.result) && !laidOut.length)
+                    }
+                  />
                 }
               >
-                <DownloadIcon data-icon="inline-start" />
+                {exporting ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <DownloadIcon data-icon="inline-start" />
+                )}
                 {t("export")}
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => void save("md")}>
-                    {t("exportMd")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void save("html")}>
-                    {t("exportHtml")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void save("txt")}>
-                    {t("exportTxt")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
+                {laidOut.length > 0 && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => void saveLayout("pdf")}>
+                      {t("exportLayoutPdf")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void saveLayout("html")}>
+                      {t("exportLayoutHtml")}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                )}
+                {laidOut.length > 0 && pages.some((p) => p.result) && (
+                  <DropdownMenuSeparator />
+                )}
+                {pages.some((p) => p.result) && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => void save("md")}>
+                      {t("exportMd")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void save("html")}>
+                      {t("exportHtml")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void save("txt")}>
+                      {t("exportTxt")}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
             <Button
@@ -543,95 +787,107 @@ export function PdfView() {
                     containIntrinsicSize: "auto 30rem",
                   }}
                 >
-                  <GlassPanel
-                    className={cn(
-                      "grid gap-4 p-4",
-                      view === "side"
-                        ? "grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,1fr)]"
-                        : "grid-cols-[minmax(0,1fr)]"
-                    )}
-                  >
-                    {view === "side" && (
-                      <>
-                        <PageThumb doc={doc} n={p.n} />
-                        <div
-                          className="reading selectable max-h-[28rem] overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-line text-muted-foreground"
-                          dir="auto"
-                        >
-                          {p.text === null ? (
-                            <Skeleton className="h-24 w-full" />
-                          ) : (
-                            p.text || (
-                              <span className="italic">
-                                {t("noTextOnPage")}
-                              </span>
-                            )
+                  {view === "layout" ? (
+                    <LayoutCard
+                      doc={doc}
+                      p={p}
+                      lang={settings.targetLang}
+                      running={running}
+                      onTranslate={() => void run(p.n)}
+                    />
+                  ) : (
+                    <GlassPanel
+                      className={cn(
+                        "grid gap-4 p-4",
+                        view === "side"
+                          ? "grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,1fr)]"
+                          : "grid-cols-[minmax(0,1fr)]"
+                      )}
+                    >
+                      {view === "side" && (
+                        <>
+                          <PageThumb doc={doc} n={p.n} />
+                          <div
+                            className="reading selectable max-h-[28rem] overflow-y-auto text-[13.5px] leading-relaxed whitespace-pre-line text-muted-foreground"
+                            dir="auto"
+                          >
+                            {p.text === null ? (
+                              <Skeleton className="h-24 w-full" />
+                            ) : (
+                              p.text || (
+                                <span className="italic">
+                                  {t("noTextOnPage")}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        </>
+                      )}
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">
+                            {t("page")}{" "}
+                            {p.n.toLocaleString(
+                              ui === "fa" ? "fa-IR" : "en-US"
+                            )}
+                          </Badge>
+                          {p.status === "working" && (
+                            <Spinner className="size-3.5" />
+                          )}
+                          {p.status === "ocr" && (
+                            <span className="shimmer-text text-xs">
+                              {t("ocrRunning")}
+                            </span>
+                          )}
+                          {p.status === "done" && p.result && (
+                            <CheckIcon className="size-3.5 text-success" />
+                          )}
+                          {p.status === "partial" && (
+                            <Badge variant="secondary">
+                              <PauseIcon data-icon="inline-start" />
+                              {t("pagePartial")}
+                            </Badge>
+                          )}
+                          {p.status === "error" && (
+                            <TriangleAlertIcon className="size-3.5 text-destructive" />
+                          )}
+                          <div className="flex-1" />
+                          {!running && p.status !== "ocr" && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => void run(p.n)}
+                            >
+                              <LanguagesIcon data-icon="inline-start" />
+                              {t("translatePage")}
+                            </Button>
                           )}
                         </div>
-                      </>
-                    )}
-                    <div className="flex min-w-0 flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">
-                          {t("page")}{" "}
-                          {p.n.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")}
-                        </Badge>
-                        {p.status === "working" && (
-                          <Spinner className="size-3.5" />
-                        )}
-                        {p.status === "ocr" && (
-                          <span className="shimmer-text text-xs">
-                            {t("ocrRunning")}
-                          </span>
-                        )}
-                        {p.status === "done" && p.result && (
-                          <CheckIcon className="size-3.5 text-success" />
-                        )}
-                        {p.status === "partial" && (
-                          <Badge variant="secondary">
-                            <PauseIcon data-icon="inline-start" />
-                            {t("pagePartial")}
-                          </Badge>
-                        )}
-                        {p.status === "error" && (
-                          <TriangleAlertIcon className="size-3.5 text-destructive" />
-                        )}
-                        <div className="flex-1" />
-                        {!running && p.status !== "ocr" && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => void run(p.n)}
+                        {p.result ? (
+                          <div
+                            className={cn(
+                              "reading selectable text-[15px]",
+                              p.status === "working" && "caret"
+                            )}
+                            dir={dir}
                           >
-                            <LanguagesIcon data-icon="inline-start" />
-                            {t("translatePage")}
-                          </Button>
+                            <Markdown text={p.result} />
+                          </div>
+                        ) : p.status === "error" && p.error ? (
+                          <PageError error={p.error} />
+                        ) : p.status === "working" ? (
+                          <div className="flex flex-col gap-2">
+                            <Skeleton className="h-4 w-[90%]" />
+                            <Skeleton className="h-4 w-[75%]" />
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            {languageName(settings.targetLang, ui)}
+                          </p>
                         )}
                       </div>
-                      {p.result ? (
-                        <div
-                          className={cn(
-                            "reading selectable text-[15px]",
-                            p.status === "working" && "caret"
-                          )}
-                          dir={dir}
-                        >
-                          <Markdown text={p.result} />
-                        </div>
-                      ) : p.status === "error" && p.error ? (
-                        <PageError error={p.error} />
-                      ) : p.status === "working" ? (
-                        <div className="flex flex-col gap-2">
-                          <Skeleton className="h-4 w-[90%]" />
-                          <Skeleton className="h-4 w-[75%]" />
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          {languageName(settings.targetLang, ui)}
-                        </p>
-                      )}
-                    </div>
-                  </GlassPanel>
+                    </GlassPanel>
+                  )}
                 </motion.div>
               ))}
             </div>

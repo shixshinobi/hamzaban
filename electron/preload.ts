@@ -110,6 +110,15 @@ const api = {
       content: string
       filters?: { name: string; extensions: string[] }[]
     }): Promise<string | null> => ipcRenderer.invoke("file:save", opts),
+    /** A page drawn from HTML and saved as PDF (real text) or PNG. */
+    saveRendered: (opts: {
+      name: string
+      html: string
+      format: "pdf" | "png"
+      width: number
+      height: number
+    }): Promise<string | null> =>
+      ipcRenderer.invoke("file:save-rendered", opts),
     readText: (
       filters?: { name: string; extensions: string[] }[]
     ): Promise<{ name: string; content: string } | null> =>

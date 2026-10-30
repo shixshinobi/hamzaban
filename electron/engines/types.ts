@@ -106,7 +106,10 @@ export async function httpError(res: Response): Promise<EngineError> {
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-  if (res.status === 403 && /client does not have permission/i.test(String(detail)))
+  if (
+    res.status === 403 &&
+    /client does not have permission/i.test(String(detail))
+  )
     return new EngineError(
       `HTTP 403 — ${URL.parse(res.url)?.host ?? "The server"} refused this network before reading the request.`,
       "blocked",

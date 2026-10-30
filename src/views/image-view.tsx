@@ -1,21 +1,38 @@
 import {
   ClipboardPasteIcon,
   CropIcon,
+  DownloadIcon,
   ImageUpIcon,
+  RotateCcwIcon,
   ScanTextIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react"
 import { motion } from "motion/react"
+import { toast } from "sonner"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { GlassPanel } from "@/components/glass/glass-panel"
+import { LayoutCanvas } from "@/components/layout/layout-canvas"
+import {
+  ErrorDetail,
+  errorHint,
+  errorTitle,
+} from "@/components/result/error-text"
 import { EngineChips, ResultActions } from "@/components/result/result-actions"
 import {
   ResultSurface,
   useResultModel,
 } from "@/components/result/result-surface"
 import { TranslateToolbar } from "@/components/translate-toolbar"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Empty,
   EmptyContent,
@@ -26,10 +43,14 @@ import {
 } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { hz } from "@/lib/hz"
 import { useT } from "@/lib/i18n"
+import { layoutHtml } from "@/lib/layout-export"
 import { useApp } from "@/lib/store"
+import { useLayoutJob } from "@/lib/use-layout-job"
 import { useTranslator } from "@/lib/use-translator"
 import { cn } from "@/lib/utils"
 
@@ -61,14 +82,60 @@ export function ImageView() {
   const [picking, setPicking] = useState(false)
   const { state, ocr, translate, retry, cancel, clear } = useTranslator()
   const model = useResultModel(state)
+  /** "layout": the image itself with its text translated in place. */
+  const [mode, setMode] = useState<"text" | "layout">("text")
+  const layout = useLayoutJob()
+  /** The image the text result belongs to. */
+  const textFor = useRef<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(
     (dataUrl: string, forceOcr = false) => {
       setImage(dataUrl)
+      if (mode === "layout") return void layout.run(dataUrl)
+      textFor.current = dataUrl
       void translate({ text: "", image: dataUrl, forceOcr })
     },
-    [translate]
+    [translate, mode, layout]
   )
+
+  const switchMode = (next: "text" | "layout") => {
+    setMode(next)
+    if (!image) return
+    // Each mode works the image out the first time it is shown.
+    if (next === "layout" && layout.job.src !== image) void layout.run(image)
+    if (next === "text" && textFor.current !== image) {
+      textFor.current = image
+      void translate({ text: "", image })
+    }
+  }
+
+  const saveLayout = async (format: "png" | "pdf" | "html") => {
+    const { page, tr } = layout.job
+    if (!page) return
+    setExporting(true)
+    try {
+      const out = await layoutHtml(
+        [{ page, tr }],
+        settings.targetLang,
+        "Hamzaban"
+      )
+      const name = `hamzaban-${settings.targetLang}.${format}`
+      const saved =
+        format === "html"
+          ? await hz.file.save({
+              name,
+              content: out.html,
+              filters: [{ name: "HTML", extensions: ["html"] }],
+            })
+          : await hz.file.saveRendered({ name, format, ...out })
+      if (saved) toast.success(t("exportSaved"), { description: saved })
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     if (pending?.image) {
@@ -126,16 +193,25 @@ export function ImageView() {
     lastPrefs.current = prefs
     if (!image) return
     // Several quick changes become one request.
-    const id = setTimeout(
-      () => rerun.current({ engineId: undefined, forceOcr: false }),
-      700
-    )
+    const id = setTimeout(() => {
+      if (mode === "layout") void layout.run(image, true)
+      else rerun.current({ engineId: undefined, forceOcr: false })
+    }, 700)
     return () => clearTimeout(id)
-  }, [prefs, image])
+  }, [prefs, image, mode, layout])
 
   const targetLang = state.request?.targetLang ?? settings.targetLang
+  const lay = layout.job
+  const layBusy =
+    lay.status === "reading" || lay.status === "ocr" || lay.status === "working"
   const busy =
-    state.status === "waiting" || state.status === "streaming" || ocr.running
+    mode === "layout"
+      ? layBusy
+      : state.status === "waiting" ||
+        state.status === "streaming" ||
+        ocr.running
+  const reading = mode === "layout" ? lay.status === "ocr" : ocr.running
+  const progress = mode === "layout" ? lay.ocr : ocr.progress
 
   return (
     <div
@@ -227,7 +303,9 @@ export function ImageView() {
                 aria-label={t("clear")}
                 onClick={() => {
                   setImage(null)
+                  textFor.current = null
                   clear()
+                  layout.clear()
                 }}
               >
                 <XIcon />
@@ -243,65 +321,176 @@ export function ImageView() {
                 className="max-h-full max-w-full rounded-xl object-contain shadow-lg ring-1 ring-border"
               />
             </div>
-            {ocr.running && (
+            {reading && (
               <div className="glass glass-strong absolute inset-x-4 bottom-4 flex items-center gap-3 rounded-xl px-3 py-2 text-xs">
                 <span className="shimmer-text shrink-0 font-medium">
                   {t("ocrRunning")}
                 </span>
-                <Progress value={ocr.progress * 100} className="h-1 flex-1" />
+                <Progress value={progress * 100} className="h-1 flex-1" />
               </div>
             )}
           </GlassPanel>
 
           <GlassPanel sheen className="flex min-h-0 flex-col overflow-hidden">
-            <div className="flex h-11 shrink-0 items-center px-4">
-              <span className="text-xs text-muted-foreground">
-                {state.engineName}
-              </span>
+            <div className="flex h-11 shrink-0 items-center gap-2 ps-2 pe-4">
+              <ToggleGroup
+                value={[mode]}
+                onValueChange={(v) =>
+                  v[0] && switchMode(v[0] as "text" | "layout")
+                }
+                size="sm"
+                variant="outline"
+                spacing={0}
+              >
+                <ToggleGroupItem value="text">{t("textView")}</ToggleGroupItem>
+                <ToggleGroupItem value="layout">
+                  {t("layoutView")}
+                </ToggleGroupItem>
+              </ToggleGroup>
+              {mode === "text" && (
+                <span className="truncate text-xs text-muted-foreground">
+                  {state.engineName}
+                </span>
+              )}
               <div className="flex-1" />
               {busy ? (
-                <Button size="sm" variant="secondary" onClick={cancel}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={mode === "layout" ? layout.stop : cancel}
+                >
                   <SquareIcon data-icon="inline-start" />
                   {t("stop")}
                 </Button>
-              ) : (
+              ) : mode === "text" ? (
                 <ResultActions
                   text={model.plain}
                   lang={targetLang}
                   onRetry={() => retry()}
                 />
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={t("retry")}
+                    onClick={() => void layout.run(image, true)}
+                  >
+                    <RotateCcwIcon />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={exporting || !lay.tr.some(Boolean)}
+                        />
+                      }
+                    >
+                      {exporting ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <DownloadIcon data-icon="inline-start" />
+                      )}
+                      {t("export")}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem
+                          onClick={() => void saveLayout("png")}
+                        >
+                          {t("exportLayoutPng")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => void saveLayout("pdf")}
+                        >
+                          {t("exportLayoutPdf")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => void saveLayout("html")}
+                        >
+                          {t("exportLayoutHtml")}
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
             </div>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="flex flex-col gap-3 px-5 pt-1 pb-5">
-                {ocr.text && (
-                  <details className="text-sm text-muted-foreground">
-                    <summary className="cursor-pointer select-none">
-                      {t("originalText")}
-                    </summary>
-                    <p
-                      className="selectable mt-2 whitespace-pre-wrap"
-                      dir="auto"
+            {mode === "layout" ? (
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="flex flex-col gap-3 px-4 pt-1 pb-4">
+                  {lay.status === "error" && lay.error && (
+                    <Alert
+                      variant="destructive"
+                      className="glass-flat border-0"
                     >
-                      {ocr.text}
+                      <AlertTitle>{t(errorTitle(lay.error.code))}</AlertTitle>
+                      <AlertDescription className="break-words">
+                        {errorHint(lay.error.code) && (
+                          <p>{t(errorHint(lay.error.code)!)}</p>
+                        )}
+                        <ErrorDetail message={lay.error.message} />
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {lay.page ? (
+                    lay.page.regions.length ? (
+                      <LayoutCanvas
+                        page={lay.page}
+                        tr={lay.tr}
+                        lang={targetLang}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {t("layoutNoText")}
+                      </p>
+                    )
+                  ) : (
+                    <Skeleton className="aspect-[4/3] w-full rounded-lg" />
+                  )}
+                  {lay.page && lay.page.regions.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("layoutHint")}
                     </p>
-                  </details>
-                )}
-                <ResultSurface
-                  state={state}
-                  model={model}
-                  size="main"
-                  targetLang={targetLang}
-                  onRetry={() => retry()}
-                />
+                  )}
+                </div>
+              </ScrollArea>
+            ) : (
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="flex flex-col gap-3 px-5 pt-1 pb-5">
+                  {ocr.text && (
+                    <details className="text-sm text-muted-foreground">
+                      <summary className="cursor-pointer select-none">
+                        {t("originalText")}
+                      </summary>
+                      <p
+                        className="selectable mt-2 whitespace-pre-wrap"
+                        dir="auto"
+                      >
+                        {ocr.text}
+                      </p>
+                    </details>
+                  )}
+                  <ResultSurface
+                    state={state}
+                    model={model}
+                    size="main"
+                    targetLang={targetLang}
+                    onRetry={() => retry()}
+                  />
+                </div>
+              </ScrollArea>
+            )}
+            {mode === "text" && (
+              <div className="flex shrink-0 items-center gap-2 border-t px-3 py-2">
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {t("compareWith")}
+                </span>
+                <EngineChips />
               </div>
-            </ScrollArea>
-            <div className="flex shrink-0 items-center gap-2 border-t px-3 py-2">
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {t("compareWith")}
-              </span>
-              <EngineChips />
-            </div>
+            )}
           </GlassPanel>
         </div>
       )}

@@ -23,6 +23,7 @@ import type {
 } from "../shared/types"
 import { readImageDataUrl, readText, writeText } from "./clip"
 import { log } from "./log"
+import { saveRendered, type RenderedSave } from "./render-export"
 import {
   cancelTranslation,
   engineModels,
@@ -437,6 +438,9 @@ function registerIpc() {
       fs.writeFileSync(r.filePath, opts.content, "utf8")
       return r.filePath
     }
+  )
+  ipcMain.handle("file:save-rendered", (e, opts: RenderedSave) =>
+    saveRendered(BrowserWindow.fromWebContents(e.sender) ?? undefined, opts)
   )
   ipcMain.handle(
     "file:read-text",

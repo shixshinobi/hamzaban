@@ -1,4 +1,4 @@
-import { createWorker, type Worker } from "tesseract.js"
+import { createWorker, type Block, type Worker } from "tesseract.js"
 import { findLanguage } from "@shared/languages"
 
 let worker: Worker | null = null
@@ -13,12 +13,7 @@ function langsFor(source: string) {
   return [...set].join("+")
 }
 
-/** Recognise text in an image (data URL or canvas) with Tesseract running locally. */
-export async function recognize(
-  image: string | HTMLCanvasElement,
-  source = "auto",
-  onProgress?: (p: number) => void
-): Promise<string> {
+async function workerFor(source: string, onProgress?: (p: number) => void) {
   const langs = langsFor(source)
   progressCb = onProgress
   if (!worker || workerLangs !== langs) {
@@ -30,6 +25,27 @@ export async function recognize(
     })
     workerLangs = langs
   }
-  const { data } = await worker.recognize(image)
+  return worker
+}
+
+/** Recognise text in an image (data URL or canvas) with Tesseract running locally. */
+export async function recognize(
+  image: string | HTMLCanvasElement,
+  source = "auto",
+  onProgress?: (p: number) => void
+): Promise<string> {
+  const w = await workerFor(source, onProgress)
+  const { data } = await w.recognize(image)
   return data.text.replace(/\n{3,}/g, "\n\n").trim()
+}
+
+/** Recognise text with its layout: blocks, paragraphs and lines, each with a box. */
+export async function recognizeBlocks(
+  image: string | HTMLCanvasElement,
+  source = "auto",
+  onProgress?: (p: number) => void
+): Promise<Block[]> {
+  const w = await workerFor(source, onProgress)
+  const { data } = await w.recognize(image, {}, { blocks: true, text: false })
+  return data.blocks ?? []
 }

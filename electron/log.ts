@@ -14,7 +14,12 @@ export function logFile() {
  */
 export function log(scope: string, ...parts: unknown[]) {
   const line = `${new Date().toISOString()} [${scope}] ${parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))).join(" ")}`
-  if (!app.isPackaged) console.log(line)
+  try {
+    // A dev console that has gone away (closed terminal) throws EPIPE here.
+    if (!app.isPackaged) console.log(line)
+  } catch {
+    // the file below still gets the line
+  }
   try {
     if (!file) {
       file = logFile()

@@ -11,6 +11,8 @@ export async function openPdf(
 ): Promise<PDFDocumentProxy> {
   return pdfjs.getDocument({
     data: data instanceof Uint8Array ? data : new Uint8Array(data),
+    // Keeps each font's name and weight, so in-place translations can stay bold.
+    fontExtraProperties: true,
   }).promise
 }
 
@@ -80,6 +82,8 @@ export async function renderPage(
   const canvas = document.createElement("canvas")
   canvas.width = Math.floor(viewport.width)
   canvas.height = Math.floor(viewport.height)
-  await page.render({ canvas, viewport }).promise
+  // The print intent draws without waiting for animation frames, which a hidden
+  // window never gets: OCR of a scanned page keeps going in the background.
+  await page.render({ canvas, viewport, intent: "print" }).promise
   return canvas
 }
