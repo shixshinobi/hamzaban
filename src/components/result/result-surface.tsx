@@ -33,6 +33,7 @@ import type { TranslationState } from "@/lib/use-translation"
 import { cn } from "@/lib/utils"
 import { Appear, BlockView, Markdown } from "./blocks"
 import { DictionaryView, fromBlocks, fromGoogle } from "./dictionary-view"
+import { ErrorDetail, errorHint, errorTitle } from "./error-text"
 
 export interface ResultModel {
   layout: Layout
@@ -176,38 +177,15 @@ function ErrorView({
   const t = useT()
   const setRoute = useApp((s) => s.setRoute)
   const code = state.error?.code
-  const title =
-    code === "needs-login"
-      ? t("errNeedsLogin")
-      : code === "held"
-        ? t("errHeld")
-        : code === "quota"
-          ? t("errQuota")
-          : code === "blocked"
-            ? t("errBlocked")
-          : code === "not-installed"
-            ? t("errNotInstalled")
-            : code === "network"
-              ? t("errNetwork")
-              : code === "auth"
-                ? t("errAuth")
-                : t("errUnknown")
+  const hint = errorHint(code)
   return (
     <Alert variant="destructive" className="glass-flat border-0">
       <TriangleAlertIcon />
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription className="break-words" dir="auto">
-        {code === "held" ? (
-          t("errHeldHint")
-        ) : code === "quota" || code === "blocked" ? (
-          <>
-            {state.error?.message}
-            <br />
-            {t(code === "quota" ? "errQuotaHint" : "errBlockedHint")}
-          </>
-        ) : (
-          state.error?.message
-        )}
+      <AlertTitle>{t(errorTitle(code))}</AlertTitle>
+      <AlertDescription className="break-words">
+        {hint && <p>{t(hint)}</p>}
+        {/* A held reply has no message worth showing; the hint says it all. */}
+        {code !== "held" && <ErrorDetail message={state.error?.message} />}
       </AlertDescription>
       <AlertAction className="flex gap-1">
         {code === "needs-login" && state.engineId && (

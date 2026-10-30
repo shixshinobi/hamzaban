@@ -16,7 +16,13 @@ import { isRtl, languageName } from "@shared/languages"
 import type { ErrorCode } from "@shared/types"
 import { GlassPanel } from "@/components/glass/glass-panel"
 import { Markdown } from "@/components/result/blocks"
+import {
+  ErrorDetail,
+  errorHint,
+  errorTitle,
+} from "@/components/result/error-text"
 import { TranslateToolbar } from "@/components/translate-toolbar"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -56,7 +62,7 @@ interface PageState {
   parts: string[]
   /** "partial": stopped with some chunks translated. */
   status: "idle" | "ocr" | "working" | "partial" | "done" | "error"
-  error?: string
+  error?: { message: string; code?: ErrorCode }
 }
 
 /** Errors that end a whole-document run instead of moving on to the next page. */
@@ -113,6 +119,20 @@ function PageThumb({ doc, n }: { doc: PDFDocumentProxy; n: number }) {
     <div ref={ref} className="w-full">
       <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
     </div>
+  )
+}
+
+function PageError({ error }: { error: NonNullable<PageState["error"]> }) {
+  const t = useT()
+  const hint = errorHint(error.code)
+  return (
+    <Alert variant="destructive" className="glass-flat border-0">
+      <AlertTitle>{t(errorTitle(error.code))}</AlertTitle>
+      <AlertDescription className="break-words">
+        {hint && <p>{t(hint)}</p>}
+        <ErrorDetail message={error.message} />
+      </AlertDescription>
+    </Alert>
   )
 }
 
@@ -293,16 +313,18 @@ export function PdfView() {
           parts.push(out.trim())
           patch(n, { parts: [...parts], result: parts.join("\n\n") })
         } catch (e) {
+          const err = e as Error & { code?: ErrorCode }
           // Only finished chunks are kept; the one cut short is translated again later.
           patch(n, {
             result: parts.join("\n\n"),
             ...(signal.aborted
               ? { status: parts.length ? "partial" : "idle" }
-              : { status: "error", error: (e as Error).message }),
+              : {
+                  status: "error",
+                  error: { message: err.message, code: err.code },
+                }),
           })
-          return signal.aborted
-            ? undefined
-            : (e as Error & { code?: ErrorCode })
+          return signal.aborted ? undefined : err
         }
       }
       patch(n, { status: "done" })
@@ -326,7 +348,7 @@ export function PdfView() {
       const err = await translatePage(n, ac.signal)
       // These fail the same way on every page: going on only burns more of the quota.
       if (err?.code && STOP_ON.includes(err.code)) {
-        toast.error(t("pdfStopped"), { description: err.message })
+        toast.error(t("pdfStopped"), { description: t(errorTitle(err.code)) })
         break
       }
     }
@@ -596,10 +618,8 @@ export function PdfView() {
                         >
                           <Markdown text={p.result} />
                         </div>
-                      ) : p.status === "error" ? (
-                        <p className="text-sm text-destructive" dir="auto">
-                          {p.error}
-                        </p>
+                      ) : p.status === "error" && p.error ? (
+                        <PageError error={p.error} />
                       ) : p.status === "working" ? (
                         <div className="flex flex-col gap-2">
                           <Skeleton className="h-4 w-[90%]" />
