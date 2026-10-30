@@ -104,6 +104,19 @@ const api = {
     readImage: (): Promise<string | null> =>
       ipcRenderer.invoke("clipboard:read-image"),
   },
+  /** The last PDF opened, kept across restarts with the work done on it. */
+  recentPdf: {
+    remember: (name: string, data: Uint8Array): Promise<void> =>
+      ipcRenderer.invoke("pdf:remember", name, data),
+    saveState: (state: unknown): Promise<void> =>
+      ipcRenderer.invoke("pdf:save-state", state),
+    recall: (): Promise<{
+      name: string
+      data: Uint8Array
+      state: unknown
+    } | null> => ipcRenderer.invoke("pdf:recall"),
+    forget: (): Promise<void> => ipcRenderer.invoke("pdf:forget"),
+  },
   file: {
     save: (opts: {
       name: string

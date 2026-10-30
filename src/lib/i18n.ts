@@ -211,6 +211,9 @@ const STRINGS = {
   exportLayoutPdf: ["PDF با چیدمان اصلی", "PDF, original layout"],
   exportLayoutPng: ["تصویر (.png)", "Image (.png)"],
   exportSaved: ["ذخیره شد", "Saved"],
+  zoomIn: ["بزرگ‌نمایی", "Zoom in"],
+  zoomOut: ["کوچک‌نمایی", "Zoom out"],
+  zoomReset: ["اندازه‌ی اصلی", "Actual size"],
 
   stylesTitle: ["سبک‌ها و اسکیل‌ها", "Styles & skills"],
   stylesHint: [

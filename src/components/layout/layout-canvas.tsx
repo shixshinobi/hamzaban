@@ -35,11 +35,13 @@ export function LayoutCanvas({
   tr,
   lang,
   className,
+  style,
 }: {
   page: LayoutPage
   tr: (string | null)[]
   lang: string
   className?: string
+  style?: React.CSSProperties
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const patches = useRef<HTMLCanvasElement>(null)
@@ -97,7 +99,7 @@ export function LayoutCanvas({
         "hz-page rounded-lg shadow-md ring-1 ring-black/5",
         className
       )}
-      style={{ aspectRatio: `${page.width} / ${page.height}` }}
+      style={{ aspectRatio: `${page.width} / ${page.height}`, ...style }}
     >
       <img className="hz-bg" src={page.image} alt="" draggable={false} />
       <canvas
@@ -117,6 +119,7 @@ export function LayoutCanvas({
             title={r.text}
           >
             <div dir={dir} className="selectable">
+              {r.marker && <span className="hz-mark">{r.marker}</span>}
               {tr[i]}
             </div>
           </div>

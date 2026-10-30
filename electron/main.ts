@@ -23,6 +23,7 @@ import type {
 } from "../shared/types"
 import { readImageDataUrl, readText, writeText } from "./clip"
 import { log } from "./log"
+import { registerRecentPdf } from "./recent-pdf"
 import { saveRendered, type RenderedSave } from "./render-export"
 import {
   cancelTranslation,
@@ -595,6 +596,7 @@ app.whenReady().then(() => {
     broadcast("theme:changed", nativeTheme.shouldUseDarkColors)
   })
   registerIpc()
+  registerRecentPdf()
   setupLiveCapture()
   onSettingsChange((s) => broadcast("settings:changed", s))
   setLoginChangeListener(() => broadcast("engines:changed"))

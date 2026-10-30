@@ -67,7 +67,7 @@ export async function layoutHtml(
         const style = Object.entries(regionStyle(r, lang))
           .map(([k, v]) => `${k}:${v}`)
           .join(";")
-        return `<div class="hz-r" data-fit${r.pitch ? " data-multi" : ""} style="${esc(style)}"><div dir="${dir}">${esc(text)}</div></div>`
+        return `<div class="hz-r" data-fit${r.pitch ? " data-multi" : ""} style="${esc(style)}"><div dir="${dir}">${r.marker ? `<span class="hz-mark">${esc(r.marker)}</span>` : ""}${esc(text)}</div></div>`
       })
       .join("")
     pages.push(

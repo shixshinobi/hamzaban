@@ -36,6 +36,8 @@ export interface LayoutRegion {
   /** Relative to the source text's direction, except for "left" and "right". */
   align: LayoutAlign
   color: string
+  /** A list item's bullet, put back in front of the translation. */
+  marker?: string
   /** The page inside `box` with the text painted out (object URL). */
   patch: string
 }
@@ -51,7 +53,18 @@ interface Line {
   bold: boolean
   serif: boolean
   text: string
+  /** Starts with a list bullet (taken out of `text`). */
+  marker?: boolean
+  /** The text's colour and what it sits on, read from the picture. */
+  ink?: RGB
+  bg?: RGB
 }
+
+/**
+ * Bullet glyphs, including the private-use code points that Symbol and Wingdings fonts
+ * put bullets at in PDFs made by Word.
+ */
+const BULLET = /^[•·‣⁃⁌⁍∙▪▫■□●○◦◆◇►➢✓✔–—*\--]$/
 
 /** Pages are pictured at this width: sharp on screen and in print, still quick to paint. */
 const RASTER_WIDTH = 1700
@@ -73,7 +86,12 @@ export async function pdfLayout(
   // The print intent draws without waiting for animation frames, which a hidden
   // window never gets, so a long document keeps going in the background.
   await page.render({ canvas, viewport, intent: "print" }).promise
-  let blocks = groupLines(await pdfLines(page, viewport.transform, scale))
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!
+  const lines = withLooks(
+    ctx,
+    drawnBullets(ctx, await pdfLines(page, viewport.transform, scale))
+  )
+  let blocks = groupLines(lines)
   if (!blocks.length) {
     onOcr?.(0)
     blocks = await ocrBlocks(canvas, sourceLang, onOcr)
@@ -168,7 +186,43 @@ async function pdfLines(
     } else lines.push(next)
   }
   for (const l of lines) l.text = l.text.replace(/\s+/g, " ").trim()
-  return lines.filter((l) => l.text)
+  return withMarkers(lines.filter((l) => l.text))
+}
+
+/**
+ * A bullet set apart from its text (its own run, often in a symbol font) becomes the
+ * marker of the line it leads, so each list item is a block of its own and the bullet
+ * can move to the other side when the translation runs the other way.
+ */
+function withMarkers(lines: Line[]): Line[] {
+  const out: Line[] = []
+  const used = new Set<Line>()
+  for (const l of lines) {
+    const lead = /^(\S)\s+(.*)$/.exec(l.text)
+    if (lead && BULLET.test(lead[1]) && /\p{L}/u.test(lead[2])) {
+      l.text = lead[2]
+      l.marker = true
+    }
+  }
+  for (const b of lines) {
+    if (!BULLET.test(b.text)) continue
+    const item = lines
+      .filter(
+        (l) =>
+          l !== b &&
+          !used.has(l) &&
+          Math.abs(l.baseline - b.baseline) < b.size * 0.4 &&
+          l.x0 > b.x0 &&
+          l.x0 - b.x1 < b.size * 4
+      )
+      .sort((p, q) => p.x0 - q.x0)[0]
+    if (!item) continue
+    used.add(b)
+    item.x0 = b.x0
+    item.marker = true
+  }
+  for (const l of lines) if (!used.has(l)) out.push(l)
+  return out
 }
 
 function isBold(page: PDFPageProxy, fontName: string) {
@@ -205,6 +259,11 @@ function groupLines(lines: Line[]): Line[][] {
       const size = Math.max(line.size, last.size)
       if (Math.abs(line.size - last.size) > size * 0.2) continue
       if (line.bold !== last.bold) continue
+      // A new list item, or text in another colour or on another background (a label on
+      // a coloured tag above a heading), starts a block of its own.
+      if (line.marker) continue
+      if (line.ink && last.ink && dist(line.ink, last.ink) > 120) continue
+      if (line.bg && last.bg && dist(line.bg, last.bg) > 60) continue
       const pitch = line.baseline - last.baseline
       if (pitch < size * 0.6 || pitch > size * 1.9) continue
       const x0 = Math.min(...block.map((l) => l.x0))
@@ -213,6 +272,8 @@ function groupLines(lines: Line[]): Line[][] {
       if (overlap < Math.min(x1 - x0, line.x1 - line.x0) * 0.5) continue
       // A short line ending a sentence closes its paragraph.
       if (last.x1 < x1 - size * 2 && /[.!?:؟。»"”]$/.test(last.text)) continue
+      // After a list item, only lines indented past its bullet carry on with it.
+      if (block[0].marker && line.x0 < block[0].x0 + size * 0.5) continue
       if (pitch < bestGap) {
         best = block
         bestGap = pitch
@@ -310,7 +371,7 @@ async function ocrBlocks(
         flush()
       }
   // OCR does not report weight, so text read from a picture stays regular.
-  return mergeOverlaps(groupLines(lines))
+  return mergeOverlaps(groupLines(withLooks(ctx, withMarkers(lines))))
 }
 
 /**
@@ -356,17 +417,22 @@ async function build(
   // Text with no letters (page numbers, figures on a chart axis) reads the same in any
   // language, so it stays as it is on the picture.
   const kept = blocks.filter((b) => b.some((l) => /\p{L}/u.test(l.text)))
-  const looks = kept.map((b) => b.map((l) => lineLook(ctx, l)))
   // Every line is painted out on one working copy, then each block's patch is cut from it.
   for (const block of kept)
     for (const l of block) erase(ctx, withoutRules(ctx, padded(l, W, H)))
   const regions: LayoutRegion[] = []
-  for (const [i, block] of kept.entries()) {
+  for (const block of kept) {
     const text = joinLines(block.map((l) => l.text))
     const dir = isRtl(guessDir(text)) ? "rtl" : "ltr"
-    const single = block.length > 1 ? null : lineAlign(block[0], kept, dir)
-    const x0 = single?.span?.[0] ?? Math.min(...block.map((l) => l.x0))
-    const x1 = single?.span?.[1] ?? Math.max(...block.map((l) => l.x1))
+    const list = block[0].marker ? listSpan(block, kept) : null
+    const single =
+      block.length > 1 || block[0].marker
+        ? null
+        : lineAlign(block[0], kept, dir)
+    const x0 =
+      list?.[0] ?? single?.span?.[0] ?? Math.min(...block.map((l) => l.x0))
+    const x1 =
+      list?.[1] ?? single?.span?.[1] ?? Math.max(...block.map((l) => l.x1))
     const top = Math.min(...block.map((l) => l.top))
     const bottom = Math.max(...block.map((l) => l.bottom))
     const size = median(block.map((l) => l.size))
@@ -391,11 +457,13 @@ async function build(
       pitch,
       bold: block.every((l) => l.bold),
       serif: block.every((l) => l.serif),
-      align: single?.align ?? alignOf(block, dir),
+      align:
+        single?.align ?? (block.length > 1 ? alignOf(block, dir) : "start"),
       color: median(
-        looks[i].map((c) => c.text),
+        block.map((l) => l.ink ?? [26, 26, 26]),
         true
       ),
+      marker: block[0].marker ? "•" : undefined,
       patch: blobUrl(crop(canvas, box), "image/png"),
     })
   }
@@ -415,6 +483,48 @@ function joinLines(lines: string[]) {
     .replace(/(\p{Ll})-\n(\p{Ll})/gu, "$1$2")
     .replace(/\s*\n\s*/g, " ")
     .trim()
+}
+
+/**
+ * How close two backgrounds must be to count as one: tight enough to tell white from
+ * the pale tint of a callout box.
+ */
+const SAME_BG = 24
+
+/**
+ * A list item spans its column with the same indent on both sides, so its translation
+ * starts as far in from whichever edge the target language starts at: a bullet that
+ * hung in from the left stays as far in from the right in Persian.
+ */
+function listSpan(item: Line[], blocks: Line[][]): [number, number] | null {
+  const ix0 = Math.min(...item.map((l) => l.x0))
+  const ix1 = Math.max(...item.map((l) => l.x1))
+  const top = Math.min(...item.map((l) => l.top))
+  const bottom = Math.max(...item.map((l) => l.bottom))
+  const bg = item[0].bg
+  const col = blocks
+    .filter(
+      (b) =>
+        b.length > 1 &&
+        !b[0].marker &&
+        (!bg || !b[0].bg || dist(bg, b[0].bg) <= SAME_BG) &&
+        // The column starts at or before the bullet (a callout set in further is not it).
+        Math.min(...b.map((l) => l.x0)) <= ix0 + item[0].size * 0.3 &&
+        Math.max(...b.map((l) => l.x1)) >= ix1 - item[0].size
+    )
+    .map((b) => ({
+      x0: Math.min(...b.map((l) => l.x0)),
+      x1: Math.max(...b.map((l) => l.x1)),
+      gap: Math.max(
+        0,
+        Math.min(...b.map((l) => l.top)) - bottom,
+        top - Math.max(...b.map((l) => l.bottom))
+      ),
+    }))
+    .sort((p, q) => p.gap - q.gap)[0]
+  if (!col) return null
+  const indent = Math.max(0, ix0 - col.x0)
+  return [col.x0 + indent, Math.max(ix1, col.x1 - indent)]
 }
 
 /**
@@ -453,6 +563,8 @@ function lineAlign(
         ? near(x1, line.x1, b[0].size)
         : near(x0, line.x0, b[0].size)
     if (!onStart && !onEnd) continue
+    // A line on its own background (a label on a tag) stays where it is.
+    if (line.bg && b[0].bg && dist(line.bg, b[0].bg) > SAME_BG) continue
     // Widen only into empty space: nothing else may sit beside the line.
     const span: [number, number] = [
       Math.min(x0, line.x0),
@@ -561,6 +673,85 @@ function ring(ctx: CanvasRenderingContext2D, r: Rect) {
   for (let x = 0; x < o.w; x++) px.push(at(x, 0), at(x, o.h - 1))
   for (let y = 1; y < o.h - 1; y++) px.push(at(0, y), at(o.w - 1, y))
   return { px, o, at }
+}
+
+/**
+ * Bullets drawn as shapes rather than written as text: a small, solid, roughly square
+ * blot of ink just before a line, with nothing else beside it. The line takes it in as
+ * its marker, so the blot is painted out with the text and the bullet is set again on
+ * whichever side the translation starts.
+ */
+function drawnBullets(ctx: CanvasRenderingContext2D, lines: Line[]) {
+  const W = ctx.canvas.width
+  const H = ctx.canvas.height
+  for (const l of lines) {
+    if (l.marker) continue
+    const r = clampBox(
+      l.x0 - l.size * 2.5,
+      l.top,
+      l.x0 - l.size * 0.15,
+      l.bottom,
+      W,
+      H
+    )
+    if (r.w < 2) continue
+    // Another run of text there means the line does not start a list item.
+    if (
+      lines.some(
+        (o) =>
+          o !== l &&
+          o.x1 > r.x &&
+          o.x0 < r.x + r.w &&
+          o.bottom > l.top &&
+          o.top < l.bottom
+      )
+    )
+      continue
+    const bg = medianRgb(ring(ctx, r).px)
+    const d = ctx.getImageData(r.x, r.y, r.w, r.h).data
+    let x0 = Infinity
+    let x1 = -1
+    let y0 = Infinity
+    let y1 = -1
+    let ink = 0
+    for (let y = 0; y < r.h; y++)
+      for (let x = 0; x < r.w; x++) {
+        const i = (y * r.w + x) * 4
+        if (dist([d[i], d[i + 1], d[i + 2]], bg) <= 120) continue
+        ink++
+        x0 = Math.min(x0, x)
+        x1 = Math.max(x1, x)
+        y0 = Math.min(y0, y)
+        y1 = Math.max(y1, y)
+      }
+    if (!ink) continue
+    const w = x1 - x0 + 1
+    const h = y1 - y0 + 1
+    const solid = ink / (w * h)
+    if (
+      w >= l.size * 0.12 &&
+      w <= l.size * 0.7 &&
+      h >= l.size * 0.12 &&
+      h <= l.size * 0.7 &&
+      Math.abs(w - h) <= Math.max(w, h) * 0.4 &&
+      solid > 0.45
+    ) {
+      // Only the blot's solid core counts as ink above; its soft edge goes too.
+      l.x0 = r.x + x0 - l.size * 0.12
+      l.marker = true
+    }
+  }
+  return lines
+}
+
+/** Read every line's text colour and background off the picture. */
+function withLooks(ctx: CanvasRenderingContext2D, lines: Line[]) {
+  for (const l of lines) {
+    const look = lineLook(ctx, l)
+    l.ink = look.text
+    l.bg = look.bg
+  }
+  return lines
 }
 
 /** The colour of a line's text: its pixels that differ most from the background. */

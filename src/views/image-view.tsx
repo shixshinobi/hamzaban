@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { GlassPanel } from "@/components/glass/glass-panel"
 import { LayoutCanvas } from "@/components/layout/layout-canvas"
+import { useZoom, ZoomControl } from "@/components/layout/zoom-control"
 import {
   ErrorDetail,
   errorHint,
@@ -85,6 +86,12 @@ export function ImageView() {
   /** "layout": the image itself with its text translated in place. */
   const [mode, setMode] = useState<"text" | "layout">("text")
   const layout = useLayoutJob()
+  const {
+    zoom,
+    step: zoomStep,
+    set: setZoom,
+    wheelRef,
+  } = useZoom("hz-zoom-image")
   /** The image the text result belongs to. */
   const textFor = useRef<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -370,6 +377,11 @@ export function ImageView() {
                 />
               ) : (
                 <div className="flex items-center gap-1">
+                  <ZoomControl
+                    zoom={zoom}
+                    onStep={zoomStep}
+                    onReset={() => setZoom(1)}
+                  />
                   <Button
                     size="icon-sm"
                     variant="ghost"
@@ -437,11 +449,15 @@ export function ImageView() {
                   )}
                   {lay.page ? (
                     lay.page.regions.length ? (
-                      <LayoutCanvas
-                        page={lay.page}
-                        tr={lay.tr}
-                        lang={targetLang}
-                      />
+                      <div className="overflow-x-auto" ref={wheelRef}>
+                        <LayoutCanvas
+                          page={lay.page}
+                          tr={lay.tr}
+                          lang={targetLang}
+                          className="mx-auto"
+                          style={{ width: `${zoom * 100}%` }}
+                        />
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         {t("layoutNoText")}

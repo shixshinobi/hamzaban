@@ -46,4 +46,5 @@ export const LAYOUT_CSS = `
 .hz-page{font-family:"Vazirmatn Variable",Vazirmatn,"Segoe UI",system-ui,sans-serif}
 .hz-r>div{position:relative;font-family:var(--f, inherit);font-size:calc(var(--s) * var(--fit, 1) * 1cqw);line-height:var(--lh);color:var(--c);font-weight:var(--w);text-align:var(--a);text-align-last:var(--al);white-space:nowrap;overflow-wrap:break-word}
 .hz-r[data-multi]>div,.hz-r[data-wrap]>div{white-space:normal}
+.hz-mark{display:inline-block;margin-inline-end:.6em}
 `

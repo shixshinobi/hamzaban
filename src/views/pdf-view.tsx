@@ -16,6 +16,7 @@ import { isRtl, languageName } from "@shared/languages"
 import type { ErrorCode } from "@shared/types"
 import { GlassPanel } from "@/components/glass/glass-panel"
 import { LayoutCanvas } from "@/components/layout/layout-canvas"
+import { useZoom, ZoomControl } from "@/components/layout/zoom-control"
 import { Markdown } from "@/components/result/blocks"
 import {
   ErrorDetail,
@@ -76,11 +77,70 @@ interface LayoutState {
   page?: LayoutPage
   /** One per region; null until it is translated. */
   tr: (string | null)[]
+  /** The regions' text `tr` was made for, kept when the pictures are not. */
+  texts?: string[]
   status: "reading" | "ocr" | "working" | "partial" | "done" | "error"
   error?: { message: string; code?: ErrorCode }
 }
 
 type View = "side" | "only" | "layout"
+
+/**
+ * What is kept of the last PDF across restarts. Pictures are not: they are drawn again
+ * when a page is shown, and its saved translations are used if its text is unchanged.
+ */
+interface SavedPdf {
+  v: 1
+  pages: {
+    text: string | null
+    result: string
+    parts: string[]
+    done: boolean
+    layout?: { texts: string[]; tr: (string | null)[]; done: boolean }
+  }[]
+}
+
+function snapshot(pages: PageState[]): SavedPdf {
+  return {
+    v: 1,
+    pages: pages.map((p) => {
+      const lay = p.layout
+      return {
+        text: p.text,
+        result: p.result,
+        parts: p.parts,
+        done: p.status === "done",
+        layout: lay?.tr.some(Boolean)
+          ? {
+              texts: lay.page?.regions.map((r) => r.text) ?? lay.texts ?? [],
+              tr: lay.tr,
+              done: lay.status === "done",
+            }
+          : undefined,
+      }
+    }),
+  }
+}
+
+function restored(saved: SavedPdf["pages"][number], n: number): PageState {
+  return {
+    n,
+    text: saved.text,
+    result: saved.result,
+    parts: saved.parts,
+    status: saved.done ? "done" : saved.parts.length ? "partial" : "idle",
+    layout: saved.layout && {
+      tr: saved.layout.tr,
+      texts: saved.layout.texts,
+      status: saved.layout.done ? "done" : "partial",
+    },
+  }
+}
+
+const sameTexts = (texts: string[] | undefined, page: LayoutPage) =>
+  !!texts &&
+  texts.length === page.regions.length &&
+  page.regions.every((r, i) => r.text === texts[i])
 
 /** Errors that end a whole-document run instead of moving on to the next page. */
 const STOP_ON: ErrorCode[] = [
@@ -153,17 +213,38 @@ function LayoutCard({
   p,
   lang,
   running,
+  zoom,
   onTranslate,
+  onShown,
 }: {
   doc: PDFDocumentProxy
   p: PageState
   lang: string
   running: boolean
+  zoom: number
   onTranslate: () => void
+  /** The card came into view without its pictures (restored from a saved session). */
+  onShown: () => void
 }) {
   const t = useT()
   const ui = useUiLang()
   const lay = p.layout
+  const ref = useRef<HTMLDivElement>(null)
+  const needsPage = !!lay && !lay.page && lay.tr.some(Boolean)
+  const shown = useRef(onShown)
+  useEffect(() => {
+    shown.current = onShown
+  })
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !needsPage) return
+    const io = new IntersectionObserver(
+      ([e]) => e.isIntersecting && shown.current(),
+      { rootMargin: "600px" }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [needsPage])
   const busy =
     lay?.status === "reading" ||
     lay?.status === "ocr" ||
@@ -209,37 +290,42 @@ function LayoutCard({
           </Button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">
-            {t("originalPage")}
-          </span>
-          {lay?.page ? (
-            <LayoutCanvas page={lay.page} tr={[]} lang={lang} />
-          ) : (
-            <PageThumb doc={doc} n={p.n} width={720} />
-          )}
-        </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">
-            {t("translatedPage")}
-          </span>
-          {lay?.status === "error" && lay.error && (
-            <PageError error={lay.error} />
-          )}
-          {lay?.page ? (
-            total ? (
-              <LayoutCanvas page={lay.page} tr={lay.tr} lang={lang} />
+      <div ref={ref} className="overflow-x-auto">
+        <div
+          className="mx-auto grid grid-cols-2 gap-4"
+          style={{ width: `${zoom * 100}%` }}
+        >
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">
+              {t("originalPage")}
+            </span>
+            {lay?.page ? (
+              <LayoutCanvas page={lay.page} tr={[]} lang={lang} />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                {t("layoutNoText")}
-              </p>
-            )
-          ) : busy ? (
-            <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("layoutHint")}</p>
-          )}
+              <PageThumb doc={doc} n={p.n} width={720} />
+            )}
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">
+              {t("translatedPage")}
+            </span>
+            {lay?.status === "error" && lay.error && (
+              <PageError error={lay.error} />
+            )}
+            {lay?.page ? (
+              total ? (
+                <LayoutCanvas page={lay.page} tr={lay.tr} lang={lang} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {t("layoutNoText")}
+                </p>
+              )
+            ) : busy || needsPage ? (
+              <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("layoutHint")}</p>
+            )}
+          </div>
         </div>
       </div>
     </GlassPanel>
@@ -305,7 +391,28 @@ export function PdfView() {
   const [name, setName] = useState("")
   const [pages, setPages] = useState<PageState[]>([])
   const [running, setRunning] = useState(false)
-  const [view, setView] = useState<View>("side")
+  const [view, setViewState] = useState<View>(() => {
+    try {
+      const v = localStorage.getItem("hz-pdf-view")
+      return v === "only" || v === "layout" ? v : "side"
+    } catch {
+      return "side"
+    }
+  })
+  const setView = (v: View) => {
+    setViewState(v)
+    try {
+      localStorage.setItem("hz-pdf-view", v)
+    } catch {
+      // The view still changes; it is just not remembered.
+    }
+  }
+  const {
+    zoom,
+    step: zoomStep,
+    set: setZoom,
+    wheelRef,
+  } = useZoom("hz-zoom-pdf")
   const [dragOver, setDragOver] = useState(false)
   /** The file being picked or opened, for the loading state. */
   const [opening, setOpening] = useState<string | null>(null)
@@ -324,10 +431,18 @@ export function PdfView() {
   const patch = (n: number, p: Partial<PageState>) =>
     setAll(pagesRef.current.map((x) => (x.n === n ? { ...x, ...p } : x)))
 
-  const load = async (name: string, data: ArrayBuffer | Uint8Array) => {
+  /** `saved`: the work kept from the last session, when reopening its file. */
+  const load = async (
+    name: string,
+    data: ArrayBuffer | Uint8Array,
+    saved?: SavedPdf | null
+  ) => {
     abortRef.current?.abort()
     const id = ++loadId.current
     setOpening(name)
+    // A copy, since pdf.js takes the bytes over; kept so the file is back after a restart.
+    if (saved === undefined)
+      void hz.recentPdf.remember(name, new Uint8Array(data).slice())
     let d: PDFDocumentProxy
     try {
       d = await openPdf(data)
@@ -343,14 +458,19 @@ export function PdfView() {
     setDoc(d)
     setName(name)
     setExtracted(0)
+    const keep = saved?.v === 1 && saved.pages.length === d.numPages
     setAll(
-      Array.from({ length: d.numPages }, (_, i) => ({
-        n: i + 1,
-        text: null,
-        result: "",
-        parts: [],
-        status: "idle",
-      }))
+      Array.from({ length: d.numPages }, (_, i) =>
+        keep
+          ? restored(saved.pages[i], i + 1)
+          : {
+              n: i + 1,
+              text: null,
+              result: "",
+              parts: [],
+              status: "idle",
+            }
+      )
     )
     setOpening(null)
     // Extract text up front so the reader can show it immediately; updates are batched
@@ -365,15 +485,44 @@ export function PdfView() {
         )
       )
     }
-    for (let n = 1; n <= d.numPages; n++) {
+    // Pages whose text was kept from the last session are not read again.
+    const todo = pagesRef.current.filter((p) => p.text === null).map((p) => p.n)
+    let read = d.numPages - todo.length
+    setExtracted(read)
+    for (const n of todo) {
       if (id !== loadId.current) return
       batch[n] = await pageText(await d.getPage(n))
-      if (n % 8 === 0 || n === d.numPages) {
+      read++
+      if (read % 8 === 0 || read === d.numPages) {
         flush()
-        setExtracted(n)
+        setExtracted(read)
       }
     }
   }
+
+  // Reopen the last PDF, with its text and translations, when the page first opens.
+  useEffect(() => {
+    let live = true
+    void hz.recentPdf.recall().then((r) => {
+      if (r && live && !pagesRef.current.length)
+        void load(r.name, r.data, (r.state as SavedPdf | null) ?? null)
+    })
+    return () => {
+      live = false
+    }
+    // load only touches refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Keep the work so far, a moment after it changes.
+  useEffect(() => {
+    if (!doc || !pages.length) return
+    const id = setTimeout(
+      () => void hz.recentPdf.saveState(snapshot(pagesRef.current)),
+      1500
+    )
+    return () => clearTimeout(id)
+  }, [doc, pages])
 
   const chooseFile = async () => {
     setPicking(true)
@@ -468,7 +617,10 @@ export function PdfView() {
   const translateLayout = useCallback(
     async (n: number, signal: AbortSignal) => {
       if (!doc) return
-      let page = pagesRef.current.find((x) => x.n === n)?.layout?.page
+      const before = pagesRef.current.find((x) => x.n === n)?.layout
+      let page = before?.page
+      // A finished page asked for again starts over; a stopped one picks up where it was.
+      const again = before?.status === "done"
       try {
         if (!page) {
           patchLayout(n, { status: "reading", error: undefined })
@@ -477,12 +629,17 @@ export function PdfView() {
             settings.sourceLang,
             () => patchLayout(n, { status: "ocr" })
           )
-          patchLayout(n, { page, tr: page.regions.map(() => null) })
+          // Translations saved last session still fit if the page reads the same.
+          patchLayout(n, {
+            page,
+            tr: sameTexts(before?.texts, page)
+              ? before!.tr
+              : page.regions.map(() => null),
+          })
         }
         if (signal.aborted) return patchLayout(n, { status: "partial" })
         const prev = pagesRef.current.find((x) => x.n === n)!.layout!
-        // A finished page asked for again starts over; a stopped one picks up where it was.
-        let tr = prev.status === "done" ? page.regions.map(() => null) : prev.tr
+        let tr = again ? page.regions.map(() => null) : prev.tr
         patchLayout(n, { status: "working", tr, error: undefined })
         await translatePieces(
           page.regions.map((r) => r.text),
@@ -543,6 +700,35 @@ export function PdfView() {
   }
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  /** Pages restored with translations but no pictures, drawn again one at a time. */
+  const drawing = useRef(new Set<number>())
+  const drawQueue = useRef(Promise.resolve())
+  const redraw = async (n: number) => {
+    if (!doc || drawing.current.has(n)) return
+    drawing.current.add(n)
+    const id = loadId.current
+    drawQueue.current = drawQueue.current.then(async () => {
+      try {
+        const cur = pagesRef.current.find((x) => x.n === n)?.layout
+        if (id !== loadId.current || !cur || cur.page) return
+        const page = await pdfLayout(await doc.getPage(n), settings.sourceLang)
+        const now = pagesRef.current.find((x) => x.n === n)?.layout
+        if (id !== loadId.current || !now || now.page)
+          return releaseLayout(page)
+        patchLayout(
+          n,
+          sameTexts(now.texts, page)
+            ? { page }
+            : { page, tr: page.regions.map(() => null), status: "partial" }
+        )
+      } catch {
+        // Left without pictures; translating the page draws them again.
+      } finally {
+        drawing.current.delete(n)
+      }
+    })
+  }
 
   const inPlace = view === "layout"
   const doneCount = pages.filter(
@@ -683,6 +869,13 @@ export function PdfView() {
               </span>
             )}
             <div className="flex-1" />
+            {view === "layout" && (
+              <ZoomControl
+                zoom={zoom}
+                onStep={zoomStep}
+                onReset={() => setZoom(1)}
+              />
+            )}
             <ToggleGroup
               value={[view]}
               onValueChange={(v) => v[0] && setView(v[0] as View)}
@@ -774,7 +967,7 @@ export function PdfView() {
           </GlassPanel>
 
           <ScrollArea className="min-h-0 flex-1">
-            <div className="flex flex-col gap-3 pb-2">
+            <div className="flex flex-col gap-3 pb-2" ref={wheelRef}>
               {pages.map((p) => (
                 <motion.div
                   key={p.n}
@@ -793,7 +986,9 @@ export function PdfView() {
                       p={p}
                       lang={settings.targetLang}
                       running={running}
+                      zoom={zoom}
                       onTranslate={() => void run(p.n)}
+                      onShown={() => void redraw(p.n)}
                     />
                   ) : (
                     <GlassPanel
