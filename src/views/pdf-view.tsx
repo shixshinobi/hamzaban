@@ -60,7 +60,13 @@ interface PageState {
 }
 
 /** Errors that end a whole-document run instead of moving on to the next page. */
-const STOP_ON: ErrorCode[] = ["quota", "auth", "needs-login", "not-installed"]
+const STOP_ON: ErrorCode[] = [
+  "quota",
+  "auth",
+  "blocked",
+  "needs-login",
+  "not-installed",
+]
 
 /** Pages go out in chunks of whole paragraphs, small enough to resume after a stop. */
 function splitChunks(text: string, max = 2500) {

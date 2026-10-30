@@ -124,6 +124,14 @@ const STRINGS = {
     "Per-minute limit, waiting",
   ],
   errAuth: ["کلید یا دسترسی معتبر نیست", "Key or access is invalid"],
+  errBlocked: [
+    "این سرویس اتصال شما را نپذیرفت",
+    "This service refused your connection",
+  ],
+  errBlockedHint: [
+    "مشکل از کلید نیست. گوگل درخواست‌های بعضی کشورها و بعضی سرورهای VPN را پیش از خواندن کلید رد می‌کند. سرور یا کشور VPN را عوض کنید و دوباره امتحان کنید، یا فعلاً موتور دیگری مثل Google یا Codex را انتخاب کنید.",
+    "It isn't the key. Google turns away requests from some countries and some VPN servers before it reads the key. Switch the VPN server or country and try again, or pick another engine such as Google or Codex for now.",
+  ],
   errUnknown: ["ترجمه انجام نشد", "Translation failed"],
   signIn: ["ورود", "Sign in"],
   signOut: ["خروج از حساب", "Sign out"],

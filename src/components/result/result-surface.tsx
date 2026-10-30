@@ -183,6 +183,8 @@ function ErrorView({
         ? t("errHeld")
         : code === "quota"
           ? t("errQuota")
+          : code === "blocked"
+            ? t("errBlocked")
           : code === "not-installed"
             ? t("errNotInstalled")
             : code === "network"
@@ -197,11 +199,11 @@ function ErrorView({
       <AlertDescription className="break-words" dir="auto">
         {code === "held" ? (
           t("errHeldHint")
-        ) : code === "quota" ? (
+        ) : code === "quota" || code === "blocked" ? (
           <>
             {state.error?.message}
             <br />
-            {t("errQuotaHint")}
+            {t(code === "quota" ? "errQuotaHint" : "errBlockedHint")}
           </>
         ) : (
           state.error?.message

@@ -142,6 +142,8 @@ export type ErrorCode =
   | "held"
   /** The key's request quota is used up (daily, or per minute after waiting once). */
   | "quota"
+  /** The host refuses this network outright (Google's edge does this for some regions and VPN exits). */
+  | "blocked"
   | "cancelled"
   | "unsupported"
   | "unknown"

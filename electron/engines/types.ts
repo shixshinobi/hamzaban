@@ -99,6 +99,19 @@ export async function httpError(res: Response): Promise<EngineError> {
   } catch {
     // ignore
   }
+  // Edge servers answer with an HTML page; keep only its readable text.
+  if (/^\s*<(!doctype|html)/i.test(String(detail)))
+    detail = String(detail)
+      .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  if (res.status === 403 && /client does not have permission/i.test(String(detail)))
+    return new EngineError(
+      `HTTP 403 — ${URL.parse(res.url)?.host ?? "The server"} refused this network before reading the request.`,
+      "blocked",
+      403
+    )
   if (res.status === 429) {
     // Google says which quota ran out and when it resets; other hosts send Retry-After.
     const delay = details.find((d) => d.retryDelay)?.retryDelay
