@@ -148,6 +148,41 @@ export type ErrorCode =
   | "unsupported"
   | "unknown"
 
+/**
+ * What an API engine has used, as counted by the app on this computer (days in UTC).
+ * Tokens come from the provider's own figures when it sends them, and are estimated
+ * from the length of the text when it does not.
+ */
+export interface EngineUsage {
+  day: string
+  requests: number
+  tokens: number
+  /** Some of today's tokens are estimates. */
+  estimated: boolean
+  month: string
+  monthRequests: number
+  monthTokens: number
+  /** The day's quota as the provider last reported it with an answer. */
+  reported?: {
+    requestsLeft?: number
+    requestsLimit?: number
+    tokensLeft?: number
+    tokensLimit?: number
+    at: number
+  }
+}
+
+/** What a provider says about the key itself, for those that can be asked (OpenRouter). */
+export interface RemoteUsage {
+  /** Credit spent, in dollars. */
+  creditsUsed?: number
+  creditsLimit?: number | null
+  creditsLeft?: number | null
+  freeTier?: boolean
+  /** Free-model requests today. */
+  freeToday?: { used?: number; limit?: number; remaining?: number }
+}
+
 /** Dictionary-style result, produced natively by Google and by LLM blocks. */
 export interface DictionaryData {
   word: string

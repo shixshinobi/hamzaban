@@ -4,7 +4,7 @@
  * naming used by Gemini, OpenAI and OpenAI-compatible hosts (OpenRouter, Groq, …).
  */
 const NOT_TEXT =
-  /image|imagen|dall-e|sora|veo|lyria|tts|audio|speech|whisper|transcri|realtime|live|embed|moderation|guard|aqa|robotics|computer-use|customtools|search-preview|babbage|davinci|rerank/i
+  /image|imagen|dall-e|sora|veo|lyria|tts|audio|speech|whisper|transcri|realtime|live|embed|moderation|guard|aqa|robotics|computer-use|customtools|search-preview|babbage|davinci|rerank|reward|retriever|safety|nemotron-parse/i
 
 /**
  * Gemini text models fit for translation, from Google's model guide (ai.google.dev,

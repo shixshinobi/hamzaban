@@ -67,6 +67,7 @@ import { useT, useUiLang, type StringKey } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
 import { applyAppearance } from "@/lib/theme"
 import { cn } from "@/lib/utils"
+import { UsageSummary } from "@/components/engines/provider-info"
 import { EngineDialog, newApiEngine } from "./engine-dialog"
 import { ShortcutRecorder } from "./shortcut-recorder"
 
@@ -652,6 +653,7 @@ function EngineSettings() {
                         : meta.label}
                   </span>
                 </ItemDescription>
+                {meta.family === "api" && <UsageSummary engineId={e.id} />}
               </ItemContent>
               <ItemActions>
                 {meta.family === "web" && e.enabled && (

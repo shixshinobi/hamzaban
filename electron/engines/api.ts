@@ -1,5 +1,6 @@
 import { isGeminiApi, translationModels } from "../../shared/models"
 import { log } from "../log"
+import { recordLimits, recordUsage } from "../usage"
 import {
   EngineError,
   httpError,
@@ -218,6 +219,7 @@ async function openAIOnce(
     return netError(e, signal)
   })
   step("response", { status: res.status })
+  recordLimits(engine.id, new URL(base).host, res.headers)
   if (!res.ok) {
     clearTimeout(idleTimer)
     throw await httpError(res)
@@ -225,6 +227,7 @@ async function openAIOnce(
   stage("thinking")
   let full = ""
   let finish = ""
+  let tokens: number | undefined
   // Gemini reports a failure part way through as a plain (multi-line) JSON body
   // appended to the stream, so lines outside the SSE framing are collected.
   let stray = ""
@@ -240,6 +243,8 @@ async function openAIOnce(
       let j: {
         error?: { message?: string }
         choices?: { delta?: { content?: string }; finish_reason?: string }[]
+        usage?: { total_tokens?: number }
+        x_groq?: { usage?: { total_tokens?: number } }
       }
       try {
         j = JSON.parse(payload)
@@ -250,6 +255,8 @@ async function openAIOnce(
         step("stream error", j.error)
         throw new EngineError(j.error.message ?? "API error", "unknown")
       }
+      // Most providers send the request's token count with the last piece.
+      tokens = j.usage?.total_tokens ?? j.x_groq?.usage?.total_tokens ?? tokens
       const choice = j.choices?.[0]
       if (choice?.finish_reason) finish = choice.finish_reason
       const piece = choice?.delta?.content ?? ""
@@ -290,7 +297,12 @@ async function openAIOnce(
       throw err
     }
   }
-  step("done", { chars: full.length, finish })
+  step("done", { chars: full.length, finish, tokens })
+  recordUsage(
+    engine.id,
+    tokens ?? estimateTokens(prompt.system + prompt.user, full),
+    tokens === undefined
+  )
   if (!full.trim())
     throw new EngineError(
       finish && finish !== "stop"
@@ -340,10 +352,14 @@ export const runAnthropic: EngineRunner = async ({
   }).catch((e) => netError(e, signal))
   if (!res.ok) throw await httpError(res)
   let full = ""
+  let tokens = 0
   for await (const line of readLines(res, signal)) {
     if (!line.startsWith("data:")) continue
     try {
       const j = JSON.parse(line.slice(5))
+      // Input tokens come at the start, output tokens at the end.
+      tokens +=
+        (j.message?.usage?.input_tokens ?? 0) + (j.usage?.output_tokens ?? 0)
       if (j.type === "content_block_delta" && j.delta?.type === "text_delta") {
         full += j.delta.text
         delta(j.delta.text)
@@ -354,7 +370,20 @@ export const runAnthropic: EngineRunner = async ({
       if (e instanceof EngineError) throw e
     }
   }
+  recordUsage(
+    engine.id,
+    tokens || estimateTokens(prompt.system + prompt.user, full),
+    !tokens
+  )
   return full
+}
+
+/**
+ * A rough token count for providers that send none: about three characters a token
+ * across English and Persian. Shown with "≈" in the app.
+ */
+function estimateTokens(input: string, output: string) {
+  return Math.round((input.length + output.length) / 3)
 }
 
 export const runOllama: EngineRunner = async ({

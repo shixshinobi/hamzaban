@@ -16,6 +16,7 @@ import {
 import fs from "node:fs"
 import path from "node:path"
 import type {
+  EngineConfig,
   PopupPayload,
   Settings,
   ShortcutAction,
@@ -24,6 +25,7 @@ import type {
 import { readImageDataUrl, readText, writeText } from "./clip"
 import { log } from "./log"
 import { registerRecentPdf } from "./recent-pdf"
+import { getUsage, onUsageChange, pruneUsage, remoteUsage } from "./usage"
 import { saveRendered, type RenderedSave } from "./render-export"
 import {
   cancelTranslation,
@@ -361,6 +363,23 @@ function registerIpc() {
       override?: { baseUrl?: string; apiKey?: string; kind?: string }
     ) => engineModels(id, override)
   )
+  ipcMain.handle("usage:get", () => getUsage())
+  ipcMain.handle(
+    "usage:remote",
+    async (
+      _e,
+      id: string,
+      override?: { baseUrl?: string; apiKey?: string }
+    ) => {
+      const engine = getEngine(id)
+      const merged = { ...engine, ...override } as EngineConfig
+      try {
+        return await remoteUsage(merged)
+      } catch {
+        return null
+      }
+    }
+  )
   ipcMain.handle("engine:login", async (_e, id: string) => {
     const engine = getEngine(id)
     if (!engine) return
@@ -598,7 +617,11 @@ app.whenReady().then(() => {
   registerIpc()
   registerRecentPdf()
   setupLiveCapture()
-  onSettingsChange((s) => broadcast("settings:changed", s))
+  onSettingsChange((s) => {
+    broadcast("settings:changed", s)
+    pruneUsage(s.engines.map((e) => e.id))
+  })
+  onUsageChange((u) => broadcast("usage:changed", u))
   setLoginChangeListener(() => broadcast("engines:changed"))
   setGoogleBlockedListener((site) => void explainGoogleBlock(site))
   buildTray()

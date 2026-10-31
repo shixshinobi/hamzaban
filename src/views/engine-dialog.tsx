@@ -2,6 +2,7 @@ import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { API_PRESETS, ENGINE_META } from "@shared/defaults"
+import { PROVIDER_INFO, TIER_ORDER } from "@shared/providers"
 import {
   bestGeminiModel,
   isGeminiApi,
@@ -10,6 +11,11 @@ import {
   type ModelNote,
 } from "@shared/models"
 import type { EngineConfig } from "@shared/types"
+import {
+  ProviderGuide,
+  TIER_LABEL,
+  UsagePanel,
+} from "@/components/engines/provider-info"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -50,6 +56,8 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -63,7 +71,7 @@ const NOTE_LABEL: Record<ModelNote, StringKey> = {
   fast: "modelFast",
 }
 
-export function newApiEngine(presetId = "openai"): EngineConfig {
+export function newApiEngine(presetId = API_PRESETS[0].id): EngineConfig {
   const p = API_PRESETS.find((x) => x.id === presetId) ?? API_PRESETS[0]
   return {
     id: `api-${Date.now().toString(36)}`,
@@ -99,6 +107,14 @@ export function EngineDialog({
   const family = ENGINE_META[draft.kind].family
   const preset = API_PRESETS.find((p) => p.id === draft.preset)
   const presetItems = API_PRESETS.map((p) => ({ label: p.name, value: p.id }))
+  // The list is grouped by how much it costs, most free quota first.
+  const presetGroups = TIER_ORDER.map((tier) => ({
+    tier,
+    presets: API_PRESETS.filter(
+      (p) => (PROVIDER_INFO[p.id]?.tier ?? "paid") === tier
+    ),
+  })).filter((g) => g.presets.length)
+  const lang = ui === "fa" ? "fa" : "en"
 
   const fetchModels = async () => {
     setLoading(true)
@@ -128,7 +144,7 @@ export function EngineDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {isNew ? t("addApiEngine") : `${t("editEngine")} · ${engine.name}`}
@@ -166,16 +182,33 @@ export function EngineDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectGroup>
-                    {presetItems.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>
-                        {p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
+                  {presetGroups.map((g, i) => (
+                    <SelectGroup key={g.tier}>
+                      {i > 0 && <SelectSeparator />}
+                      <SelectLabel>{t(TIER_LABEL[g.tier])}</SelectLabel>
+                      {g.presets.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          <span className="flex min-w-0 flex-col">
+                            <span>{p.name}</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {PROVIDER_INFO[p.id]?.quota[lang]}
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
+          )}
+          {family === "api" && draft.preset && (
+            <ProviderGuide
+              key={draft.preset}
+              presetId={draft.preset}
+              keyUrl={preset?.keyUrl}
+              open={!!isNew}
+            />
           )}
           {family === "api" && (
             <Field>
@@ -194,6 +227,7 @@ export function EngineDialog({
                 id="eng-url"
                 dir="ltr"
                 value={draft.baseUrl ?? ""}
+                placeholder={t("baseUrlExample")}
                 onChange={(e) =>
                   setDraft({ ...draft, baseUrl: e.target.value })
                 }
@@ -316,12 +350,20 @@ export function EngineDialog({
               <FieldDescription>{t("cliNote")}</FieldDescription>
             </Field>
           )}
+          {family === "api" && !isNew && (
+            <Field>
+              <FieldLabel>{t("usageTitle")}</FieldLabel>
+              <UsagePanel engine={draft} />
+            </Field>
+          )}
         </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
           <Button
+            // A gateway is unusable without the address it is reached at.
+            disabled={family === "api" && !draft.baseUrl?.trim()}
             onClick={() => {
               onSave(draft)
               onOpenChange(false)

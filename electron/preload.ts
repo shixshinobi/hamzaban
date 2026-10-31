@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron"
 import type {
   EngineStatus,
+  EngineUsage,
   HistoryItem,
   Platform,
   PopupPayload,
+  RemoteUsage,
   Settings,
   TranslateEvent,
   TranslateRequest,
@@ -54,6 +56,19 @@ const api = {
     logout: (id: string): Promise<void> =>
       ipcRenderer.invoke("engine:logout", id),
     onChange: (fn: () => void) => on("engines:changed", fn),
+  },
+  /** Requests and tokens each API engine has used, counted on this computer. */
+  usage: {
+    get: (): Promise<Record<string, EngineUsage>> =>
+      ipcRenderer.invoke("usage:get"),
+    onChange: (fn: (u: Record<string, EngineUsage>) => void) =>
+      on("usage:changed", fn),
+    /** What the provider itself reports about the key (OpenRouter). */
+    remote: (
+      id: string,
+      override?: { baseUrl?: string; apiKey?: string }
+    ): Promise<RemoteUsage | null> =>
+      ipcRenderer.invoke("usage:remote", id, override),
   },
   history: {
     get: (): Promise<HistoryItem[]> => ipcRenderer.invoke("history:get"),
