@@ -297,6 +297,10 @@ export const PROVIDER_INFO: Record<string, ProviderInfo> = {
   avalai: iranGateway("avalai.ir"),
   gapgpt: iranGateway("gapgpt.app"),
   metis: iranGateway("metisai.ir"),
+  boxapi: iranGateway("boxapi.ir", {
+    fa: "برای امتحان، اعتبار رایگان آزمایشی می‌دهد. نام مدل‌ها به شکل سازنده/مدل است، مثل google/gemini-3.8-flash.",
+    en: "Gives free trial credit to try it. Models are named maker/model, e.g. google/gemini-3.8-flash.",
+  }),
   openai: paid(
     { fa: "پولی؛ هزینه بر اساس توکن", en: "Paid per token" },
     "platform.openai.com"
@@ -350,8 +354,8 @@ export const PROVIDER_INFO: Record<string, ProviderInfo> = {
 }
 
 /** Iranian gateways: paid in rials, reachable without a VPN. */
-function iranGateway(site: string): ProviderInfo {
-  return {
+function iranGateway(site: string, extra?: Text): ProviderInfo {
+  const info: ProviderInfo = {
     tier: "iran",
     quota: {
       fa: "پولی با پرداخت ریالی؛ بدون نیاز به VPN",
@@ -382,6 +386,11 @@ function iranGateway(site: string): ProviderInfo {
       ],
     },
   }
+  if (extra) {
+    info.facts.fa.push(extra.fa)
+    info.facts.en.push(extra.en)
+  }
+  return info
 }
 
 function paid(quota: Text, site: string): ProviderInfo {

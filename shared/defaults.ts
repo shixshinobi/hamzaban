@@ -169,6 +169,15 @@ export const API_PRESETS: ApiPreset[] = [
     keyUrl: "https://metisai.ir",
   },
   {
+    id: "boxapi",
+    name: "BoxAPI",
+    kind: "openai",
+    baseUrl: "https://ai.boxapi.ir/ai/v1",
+    // Its models are named maker/model, as on OpenRouter.
+    model: "google/gemini-3.8-flash",
+    keyUrl: "https://boxapi.ir/ai-api/",
+  },
+  {
     id: "deepseek",
     name: "DeepSeek",
     kind: "openai",

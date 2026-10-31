@@ -2,9 +2,10 @@
  * Models that cannot translate text: media generation, speech, transcription,
  * embeddings, moderation, realtime/live audio and agent-only models. Covers the
  * naming used by Gemini, OpenAI and OpenAI-compatible hosts (OpenRouter, Groq, …).
+ * ":batch" variants are for offline batch jobs, not live answers.
  */
 const NOT_TEXT =
-  /image|imagen|dall-e|sora|veo|lyria|tts|audio|speech|whisper|transcri|realtime|live|embed|moderation|guard|aqa|robotics|computer-use|customtools|search-preview|babbage|davinci|rerank|reward|retriever|safety|nemotron-parse/i
+  /image|imagen|dall-e|sora|veo|lyria|tts|audio|speech|whisper|transcri|realtime|live|embed|moderation|guard|aqa|robotics|computer-use|customtools|search-preview|babbage|davinci|rerank|reward|retriever|safety|nemotron-parse|:batch/i
 
 /**
  * Gemini text models fit for translation, from Google's model guide (ai.google.dev,
