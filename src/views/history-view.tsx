@@ -27,6 +27,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { hz } from "@/lib/hz"
 import { useT, useUiLang } from "@/lib/i18n"
+import { useOriginalLook } from "@/prototype/look"
 import { useApp } from "@/lib/store"
 
 function relTime(at: number, ui: "fa" | "en") {
@@ -43,6 +44,7 @@ function relTime(at: number, ui: "fa" | "en") {
 
 export function HistoryView() {
   const t = useT()
+  const original = useOriginalLook()
   const ui = useUiLang()
   const setPending = useApp((s) => s.setPending)
   const setRoute = useApp((s) => s.setRoute)
@@ -107,10 +109,18 @@ export function HistoryView() {
             {filtered.map((it, i) => (
               <motion.div
                 key={it.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i, 10) * 0.015 }}
-                className="group glass-flat grid cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-4 rounded-2xl px-4 py-3 transition hover:bg-accent"
+                // Rows show at once; the original look (comparison picker) keeps the
+                // staggered entrance it had on main.
+                {...(original && {
+                  initial: { opacity: 0, y: 6 },
+                  animate: { opacity: 1, y: 0 },
+                  transition: { delay: Math.min(i, 10) * 0.015 },
+                })}
+                className={
+                  original
+                    ? "group glass-flat grid cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-4 rounded-2xl px-4 py-3 transition hover:bg-accent"
+                    : "group glass-flat grid cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-4 rounded-2xl px-4 py-3 transition-colors duration-150 hover:bg-accent"
+                }
                 onClick={() => {
                   if (it.hasImage) return
                   setPending({ text: it.source, origin: "manual" })

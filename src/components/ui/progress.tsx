@@ -1,5 +1,6 @@
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
 import { cn } from "cn"
+import { useOriginalLook } from "@/prototype/look"
 
 function Progress({
   className,
@@ -39,10 +40,16 @@ function ProgressIndicator({
   className,
   ...props
 }: ProgressPrimitive.Indicator.Props) {
+  const original = useOriginalLook()
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full bg-primary transition-all", className)}
+      className={cn(
+        original
+          ? "h-full bg-primary transition-all"
+          : "h-full bg-primary transition-[width] duration-300 ease-(--ease-out)",
+        className
+      )}
       {...props}
     />
   )

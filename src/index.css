@@ -55,6 +55,16 @@
 
 /* ---------- tokens ---------- */
 
+/* Motion: strong curves, since the built-in ones are too soft to feel deliberate.
+   ease-out for what enters or answers a press, ease-in-out for what moves on screen,
+   the drawer curve for sheets. Left undefined in the original look of the comparison
+   picker (src/prototype), as they were on main. */
+html:not([data-look="original"]) {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root {
   --app-font: "Vazirmatn Variable", "Geist Variable", system-ui, sans-serif;
   --radius: 0.75rem;
@@ -367,6 +377,15 @@ html:is([data-material="clear"], [data-material="live"]).dark:not(
     transform 0.15s;
   cursor: pointer;
 }
+/* Polish over the rule above; html[data-look="original"] (the comparison picker on the
+   ui-refresh branch) shows the rule as it was. Same specificity, so it only wins by
+   coming later. */
+:where(html:not([data-look="original"])) .hz-fix {
+  transform: scale(0.9);
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
 .hz-fix svg {
   width: 12px;
   height: 12px;
@@ -376,6 +395,10 @@ html:is([data-material="clear"], [data-material="live"]).dark:not(
 .hz-fix[data-popup-open] {
   opacity: 1;
   transform: none;
+}
+/* After the hover rule, or hovering (which pressing always is) would cancel it. */
+:where(html:not([data-look="original"])) .hz-r .hz-fix:active {
+  transform: scale(0.92);
 }
 
 /* The burning end of the wait ring (job-banner.tsx): a glowing core with a few sparks
@@ -680,6 +703,12 @@ html:is([data-material="clear"], [data-material="live"]).dark:not(
     background: var(--primary);
     animation: indeterminate 1.4s ease-in-out infinite;
   }
+  /* Polish: the segment travels by transform, not `left`, so the sweep never touches
+     layout (the original look keeps the rule above). */
+  :where(html:not([data-look="original"])) .indeterminate::after {
+    left: 0;
+    animation-name: indeterminate-sweep;
+  }
   [dir="rtl"] .indeterminate::after {
     animation-direction: reverse;
   }
@@ -718,6 +747,59 @@ html:is([data-material="clear"], [data-material="live"]).dark:not(
   backdrop-filter: blur(var(--glass-blur)) saturate(170%);
 }
 
+/* Overlay timing. Menus and popovers grow from their trigger on a strong ease-out and
+   leave faster than they came; a tooltip that opens while another is showing appears
+   at once, so moving along a toolbar never waits on an animation. (Left out in the
+   original look of the comparison picker.) */
+:where(html:not([data-look="original"]))
+  :is(
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
+    [data-slot="select-content"],
+    [data-slot="combobox-content"]
+  ) {
+  --tw-ease: var(--ease-out);
+  --tw-duration: 160ms;
+}
+:where(html:not([data-look="original"]))
+  :is(
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
+    [data-slot="select-content"],
+    [data-slot="combobox-content"],
+    [data-slot="tooltip-content"]
+  )[data-closed] {
+  --tw-duration: 100ms;
+}
+:where(html:not([data-look="original"])) [data-slot="tooltip-content"] {
+  --tw-ease: var(--ease-out);
+  --tw-duration: 125ms;
+}
+:where(html:not([data-look="original"]))
+  [data-slot="tooltip-content"][data-instant] {
+  animation: none;
+}
+/* Dialogs stay centred (they belong to no trigger) and open a touch slower. */
+:where(html:not([data-look="original"])) [data-slot="dialog-content"],
+:where(html:not([data-look="original"])) [data-slot="dialog-overlay"] {
+  --tw-ease: var(--ease-out);
+  --tw-duration: 200ms;
+}
+:where(html:not([data-look="original"]))
+  :is([data-slot="dialog-content"], [data-slot="dialog-overlay"])[data-closed] {
+  --tw-duration: 140ms;
+}
+:where(html:not([data-look="original"])) [data-slot="sheet-content"] {
+  transition-timing-function: var(--ease-drawer);
+  transition-duration: 300ms;
+}
+:where(html:not([data-look="original"]))
+  [data-slot="sheet-content"][data-ending-style] {
+  transition-duration: 200ms;
+}
+
 @keyframes aurora-drift {
   0% {
     transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
@@ -740,6 +822,15 @@ html:is([data-material="clear"], [data-material="live"]).dark:not(
   }
   to {
     left: 100%;
+  }
+}
+/* From just before the start to just past the end: -100% and 100/35 of its own width. */
+@keyframes indeterminate-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
   }
 }
 @keyframes caret {

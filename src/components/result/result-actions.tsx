@@ -12,6 +12,7 @@ import { useT } from "@/lib/i18n"
 import { speak } from "@/lib/speech"
 import { useApp, useEnabledEngines } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { useOriginalLook } from "@/prototype/look"
 
 export function IconAction({
   label,
@@ -112,6 +113,7 @@ export function EngineChips({
   const statuses = useApp((s) => s.statuses)
   const current = useApp((s) => s.settings!.activeEngineId)
   const update = useApp((s) => s.update)
+  const original = useOriginalLook()
   return (
     <div
       className={cn(
@@ -128,7 +130,9 @@ export function EngineChips({
             onPick?.(e.id)
           }}
           className={cn(
-            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-muted-foreground transition",
+            original
+              ? "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-muted-foreground transition"
+              : "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-muted-foreground transition-[color,background-color,scale] duration-150 ease-(--ease-out) active:scale-[0.97]",
             "hover:bg-accent hover:text-foreground",
             e.id === current && "glass-flat text-foreground"
           )}

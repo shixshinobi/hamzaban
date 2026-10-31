@@ -61,6 +61,7 @@ import { buildRequest } from "@/lib/request"
 import { useApp } from "@/lib/store"
 import { translateAsync } from "@/lib/translate-async"
 import { cn } from "@/lib/utils"
+import { useOriginalLook } from "@/prototype/look"
 
 interface PageState {
   n: number
@@ -405,6 +406,7 @@ section{border-bottom:1px solid #e6e7ea;padding:1.5rem 0}h6{color:#8a8f98;font-w
 
 export function PdfView() {
   const t = useT()
+  const original = useOriginalLook()
   const ui = useUiLang()
   const settings = useApp((s) => s.settings!)
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
@@ -1084,9 +1086,21 @@ export function PdfView() {
               {pages.map((p) => (
                 <motion.div
                   key={p.n}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(p.n, 8) * 0.02 }}
+                  {...(original
+                    ? {
+                        initial: { opacity: 0, y: 8 },
+                        animate: { opacity: 1, y: 0 },
+                        transition: { delay: Math.min(p.n, 8) * 0.02 },
+                      }
+                    : {
+                        initial: { opacity: 0 },
+                        animate: { opacity: 1 },
+                        transition: {
+                          duration: 0.24,
+                          ease: [0.23, 1, 0.32, 1],
+                          delay: Math.min(p.n, 8) * 0.03,
+                        },
+                      })}
                   // Off-screen pages of a long document are skipped until scrolled to.
                   style={{
                     contentVisibility: "auto",

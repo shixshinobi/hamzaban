@@ -8,7 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { LiveBackdrop } from "@/components/glass/live-backdrop"
 import { Logo } from "@/components/logo"
@@ -23,6 +23,7 @@ import { hz } from "@/lib/hz"
 import { useT, type StringKey } from "@/lib/i18n"
 import { useApp, type Route } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { useOriginalLook } from "@/prototype/look"
 import { HistoryView } from "./history-view"
 import { ImageView } from "./image-view"
 import { Onboarding } from "./onboarding"
@@ -53,6 +54,7 @@ function NavButton({
 }) {
   const t = useT()
   const setRoute = useApp((s) => s.setRoute)
+  const original = useOriginalLook()
   return (
     <Tooltip>
       <TooltipTrigger
@@ -62,7 +64,9 @@ function NavButton({
             onClick={() => setRoute(id)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex size-12 flex-col items-center justify-center gap-0.5 rounded-2xl text-muted-foreground transition-colors outline-none",
+              original
+                ? "relative flex size-11 flex-col items-center justify-center gap-0.5 rounded-[18px] text-muted-foreground transition-colors outline-none"
+                : "relative flex size-11 flex-col items-center justify-center gap-0.5 rounded-[18px] text-muted-foreground transition-[color,scale] duration-150 ease-(--ease-out) outline-none active:scale-[0.96]",
               "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
               active && "text-foreground"
             )}
@@ -72,7 +76,7 @@ function NavButton({
         {active && (
           <motion.span
             layoutId="nav-drop"
-            className="glass glass-strong liquid absolute inset-0 rounded-2xl"
+            className="glass glass-strong liquid absolute inset-0 rounded-[18px]"
             transition={{
               type: "spring",
               stiffness: 420,
@@ -88,7 +92,13 @@ function NavButton({
           )}
           strokeWidth={active ? 2.1 : 1.8}
         />
-        <span className="relative text-[10px] leading-none font-medium">
+        <span
+          className={
+            original
+              ? "relative text-[10px] leading-none font-medium"
+              : "relative text-[11px] leading-none font-medium"
+          }
+        >
           {t(label)}
         </span>
       </TooltipTrigger>
@@ -109,6 +119,20 @@ function headerInset(os?: string): React.CSSProperties {
 
 const KEPT: Route[] = ["translate", "image", "pdf"]
 
+// The picker for the looks being compared on this branch; development builds only.
+const LookPicker = import.meta.env.DEV
+  ? lazy(() => import("@/prototype/look-picker"))
+  : null
+
+/* Switching pages happens many times a day: a short fade that only keeps the change
+   from looking like a flash. Opacity alone, so the glass panels are not re-rasterised
+   at every frame of a scale, and the old page leaves faster than the new one arrives
+   (the two overlap instead of waiting on each other). */
+const PAGE_IN = { duration: 0.16, ease: [0.23, 1, 0.32, 1] } as const
+const PAGE_OUT = { duration: 0.1, ease: [0.23, 1, 0.32, 1] } as const
+// The page change as it was on main, for the original look of the comparison picker.
+const ORIGINAL_PAGE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const
+
 export function MainWindow() {
   const t = useT()
   const route = useApp((s) => s.route)
@@ -120,6 +144,7 @@ export function MainWindow() {
   const live = useApp((s) => s.platform?.material === "live")
   const settings = useApp((s) => s.settings!)
   const refreshStatus = useApp((s) => s.refreshStatus)
+  const original = useOriginalLook()
 
   useEffect(() => {
     void refreshStatus()
@@ -164,7 +189,7 @@ export function MainWindow() {
       </header>
 
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3">
-        <nav className="glass flex w-[68px] shrink-0 flex-col items-center gap-1 rounded-[26px] p-2">
+        <nav className="glass flex w-[60px] shrink-0 flex-col items-center gap-1 rounded-[26px] p-2">
           {NAV.map((n) => (
             <NavButton key={n.id} {...n} active={route === n.id} />
           ))}
@@ -190,26 +215,36 @@ export function MainWindow() {
               inert={route !== r}
               initial={false}
               animate={
-                route === r
-                  ? { opacity: 1, scale: 1 }
-                  : { opacity: 0, scale: 0.985 }
+                original
+                  ? route === r
+                    ? { opacity: 1, scale: 1 }
+                    : { opacity: 0, scale: 0.985 }
+                  : { opacity: route === r ? 1 : 0 }
               }
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              transition={original ? ORIGINAL_PAGE : PAGE_IN}
             >
               {r === "translate" && <TranslateView />}
               {r === "image" && <ImageView />}
               {r === "pdf" && <PdfView />}
             </motion.div>
           ))}
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence mode={original ? "wait" : undefined} initial={false}>
             {!KEPT.includes(route) && (
               <motion.div
                 key={route}
                 className="absolute inset-0"
-                initial={{ opacity: 0, scale: 0.985 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.99 }}
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                {...(original
+                  ? {
+                      initial: { opacity: 0, scale: 0.985 },
+                      animate: { opacity: 1, scale: 1 },
+                      exit: { opacity: 0, scale: 0.99 },
+                      transition: ORIGINAL_PAGE,
+                    }
+                  : {
+                      initial: { opacity: 0 },
+                      animate: { opacity: 1, transition: PAGE_IN },
+                      exit: { opacity: 0, transition: PAGE_OUT },
+                    })}
               >
                 {route === "styles" && <StylesView />}
                 {route === "history" && <HistoryView />}
@@ -220,6 +255,11 @@ export function MainWindow() {
         </main>
       </div>
       {!settings.onboarded && <Onboarding />}
+      {LookPicker && (
+        <Suspense>
+          <LookPicker />
+        </Suspense>
+      )}
     </div>
   )
 }

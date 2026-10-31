@@ -41,7 +41,10 @@ export function TranslateToolbar({
 
   const smart = settings.smartLayout && isLlm
   return (
-    <GlassPanel className="flex h-12 shrink-0 items-center gap-1 rounded-[20px] px-2">
+    <GlassPanel
+      data-part="toolbar"
+      className="flex h-12 shrink-0 items-center gap-1 rounded-[20px] px-2"
+    >
       <LanguagePicker
         value={settings.sourceLang}
         onChange={(sourceLang) => void update({ sourceLang })}

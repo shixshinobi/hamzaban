@@ -1,4 +1,5 @@
 import { StrictMode, useEffect } from "react"
+import { MotionConfig } from "motion/react"
 import { createRoot } from "react-dom/client"
 
 import "./index.css"
@@ -7,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { hz } from "@/lib/hz"
 import { useApp } from "@/lib/store"
+import { useOriginalLook } from "@/prototype/look"
 import { applyAppearance, useThemeClass } from "@/lib/theme"
 import { Capture } from "@/views/capture"
 import { MainWindow } from "@/views/main-window"
@@ -16,6 +18,7 @@ const route = window.location.hash.replace("#", "") || "main"
 
 function Root() {
   useThemeClass()
+  const original = useOriginalLook()
   const settings = useApp((s) => s.settings)
   const platform = useApp((s) => s.platform)
 
@@ -42,11 +45,15 @@ function Root() {
   if (!settings || !platform) return null
 
   return (
-    <TooltipProvider delay={500}>
-      <LiquidFilter />
-      {route === "popup" ? <Popup /> : <MainWindow />}
-      <Toaster position="bottom-center" />
-    </TooltipProvider>
+    // Reduced motion in the OS drops movement from every motion component; fades stay.
+    // (Not in the original look of the comparison picker, which had no such config.)
+    <MotionConfig reducedMotion={original ? "never" : "user"}>
+      <TooltipProvider delay={500}>
+        <LiquidFilter />
+        {route === "popup" ? <Popup /> : <MainWindow />}
+        <Toaster position="bottom-center" />
+      </TooltipProvider>
+    </MotionConfig>
   )
 }
 

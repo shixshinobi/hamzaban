@@ -19,6 +19,7 @@ import {
 import { hz } from "@/lib/hz"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { useOriginalLook } from "@/prototype/look"
 
 export function Appear({
   children,
@@ -29,16 +30,32 @@ export function Appear({
   index?: number
   className?: string
 }) {
+  const original = useOriginalLook()
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y: 6, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={{
-        duration: 0.38,
-        ease: [0.22, 1, 0.36, 1],
-        delay: Math.min(index, 6) * 0.03,
-      }}
+      // A short rise with no blur: a filter on every streamed block costs a repaint
+      // per frame, and an ancestor with one cuts nested glass off from its backdrop.
+      // The original look (comparison picker) keeps the entrance it had on main.
+      {...(original
+        ? {
+            initial: { opacity: 0, y: 6, filter: "blur(6px)" },
+            animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+            transition: {
+              duration: 0.38,
+              ease: [0.22, 1, 0.36, 1],
+              delay: Math.min(index, 6) * 0.03,
+            },
+          }
+        : {
+            initial: { opacity: 0, y: 4 },
+            animate: { opacity: 1, y: 0 },
+            transition: {
+              duration: 0.24,
+              ease: [0.23, 1, 0.32, 1],
+              delay: Math.min(index, 6) * 0.03,
+            },
+          })}
     >
       {children}
     </motion.div>
@@ -170,11 +187,14 @@ function CopyChip({
   className?: string
 }) {
   const [done, setDone] = useState(false)
+  const original = useOriginalLook()
   return (
     <button
       type="button"
       className={cn(
-        "group/chip inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-sm ring-1 ring-border transition hover:bg-accent hover:ring-primary/30 active:scale-[0.98]",
+        original
+          ? "group/chip inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-sm ring-1 ring-border transition hover:bg-accent hover:ring-primary/30 active:scale-[0.98]"
+          : "group/chip inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-sm ring-1 ring-border transition-[background-color,box-shadow,scale] duration-150 ease-(--ease-out) hover:bg-accent hover:ring-primary/30 active:scale-[0.97]",
         className
       )}
       onClick={() => {

@@ -67,6 +67,7 @@ import { useT, useUiLang, type StringKey } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
 import { applyAppearance } from "@/lib/theme"
 import { cn } from "@/lib/utils"
+import { useOriginalLook } from "@/prototype/look"
 import {
   FreeModelsBanner,
   UsageSummary,
@@ -269,6 +270,7 @@ function TuningSlider({
 
 function GeneralSettings() {
   const t = useT()
+  const original = useOriginalLook()
   const s = useApp((st) => st.settings!)
   const os = useApp((st) => st.platform?.os)
   const update = useApp((st) => st.update)
@@ -347,7 +349,9 @@ function GeneralSettings() {
                   aria-pressed={active}
                   onClick={() => void update(th.look)}
                   className={cn(
-                    "group flex flex-col gap-1.5 rounded-xl p-1.5 text-start text-xs transition outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    original
+                      ? "group flex flex-col gap-1.5 rounded-xl p-1.5 text-start text-xs transition outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      : "group flex flex-col gap-1.5 rounded-xl p-1.5 text-start text-xs transition-[background-color,box-shadow,scale] duration-150 ease-(--ease-out) outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98]",
                     active
                       ? "bg-primary/10 ring-2 ring-primary"
                       : "ring-1 ring-border hover:bg-accent"
