@@ -4,6 +4,8 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
+const PDFJS_FILES = new URL("pdfjs/", document.baseURI).href
+
 export type { PDFDocumentProxy }
 
 export async function openPdf(
@@ -13,6 +15,14 @@ export async function openPdf(
     data: data instanceof Uint8Array ? data : new Uint8Array(data),
     // Keeps each font's name and weight, so in-place translations can stay bold.
     fontExtraProperties: true,
+    // Image decoders, colour profiles, character maps and fonts pdf.js loads as needed
+    // (copied next to the app by vite.config.ts). Without them JPEG 2000 and JBIG2
+    // images are left blank, and some fonts and scripts do not draw.
+    wasmUrl: PDFJS_FILES + "wasm/",
+    iccUrl: PDFJS_FILES + "iccs/",
+    cMapUrl: PDFJS_FILES + "cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl: PDFJS_FILES + "standard_fonts/",
   }).promise
 }
 
