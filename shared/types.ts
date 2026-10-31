@@ -146,6 +146,10 @@ export type ErrorCode =
   | "blocked"
   | "cancelled"
   | "unsupported"
+  /** The provider lists the model but is not running it right now. */
+  | "unavailable"
+  /** Connected, but the model gave no answer in time (a busy free service). */
+  | "slow"
   | "unknown"
 
 /**

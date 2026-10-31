@@ -110,6 +110,9 @@ const api = {
     onTranslate: (fn: (p: PopupPayload) => void) => on("main:translate", fn),
     onTheme: (fn: (dark: boolean) => void) => on("theme:changed", fn),
     onPlatform: (fn: (p: Platform) => void) => on("platform:changed", fn),
+    /** The window filled the screen, or stopped filling it. */
+    onMaximized: (fn: (maximized: boolean) => void) =>
+      on("window:maximized", fn),
     windowControl: (action: "minimize" | "maximize" | "close") =>
       ipcRenderer.send("window:control", action),
   },

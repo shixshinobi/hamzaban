@@ -188,8 +188,10 @@ async function openAIOnce(
     clearTimeout(idleTimer)
     idleTimer = setTimeout(() => idle.abort(), ms)
   }
-  // Gemini can switch to another model, so a silent one is dropped sooner.
-  const firstWait = isGeminiApi(base) ? 60 : 90
+  // Gemini can switch to another model, so a silent one is dropped sooner. NVIDIA's free
+  // models wait in a queue first, often for more than a minute at busy hours.
+  const nvidia = base.includes("integrate.api.nvidia.com")
+  const firstWait = isGeminiApi(base) ? 60 : nvidia ? 180 : 90
   armIdle(firstWait * 1000)
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
@@ -211,7 +213,7 @@ async function openAIOnce(
     if (idle.signal.aborted && !signal.aborted) {
       const err = new EngineError(
         `${model} did not respond in ${firstWait} s.`,
-        "network"
+        "slow"
       )
       err.timedOut = true
       throw err
@@ -222,6 +224,13 @@ async function openAIOnce(
   recordLimits(engine.id, new URL(base).host, res.headers)
   if (!res.ok) {
     clearTimeout(idleTimer)
+    // NVIDIA lists models whose server is not running ("Function … not found").
+    if (nvidia && res.status === 404)
+      throw new EngineError(
+        `HTTP 404 — NVIDIA lists ${model} but is not running it right now.`,
+        "unavailable",
+        404
+      )
     throw await httpError(res)
   }
   stage("thinking")

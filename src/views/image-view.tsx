@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { GlassPanel } from "@/components/glass/glass-panel"
 import { LayoutCanvas } from "@/components/layout/layout-canvas"
+import { JobBanner } from "@/components/result/job-banner"
 import { useZoom, ZoomControl } from "@/components/layout/zoom-control"
 import {
   ErrorDetail,
@@ -50,6 +51,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { hz } from "@/lib/hz"
 import { useT } from "@/lib/i18n"
 import { layoutHtml } from "@/lib/layout-export"
+import { retranslatePiece } from "@/lib/layout-translate"
 import { useApp } from "@/lib/store"
 import { useLayoutJob } from "@/lib/use-layout-job"
 import { useTranslator } from "@/lib/use-translator"
@@ -447,6 +449,13 @@ export function ImageView() {
                       </AlertDescription>
                     </Alert>
                   )}
+                  {layBusy && lay.progress && (
+                    // Over the picture being translated; the list scrolls under it.
+                    <JobBanner
+                      job={lay.progress}
+                      className="sticky top-2 z-10 -mb-14 bg-popover/95 text-popover-foreground shadow-lg ring-1 ring-border"
+                    />
+                  )}
                   {lay.page ? (
                     lay.page.regions.length ? (
                       <div className="overflow-x-auto" ref={wheelRef}>
@@ -454,6 +463,14 @@ export function ImageView() {
                           page={lay.page}
                           tr={lay.tr}
                           lang={targetLang}
+                          onFix={layout.setPiece}
+                          onRetranslate={(i, previous) =>
+                            retranslatePiece(
+                              lay.page!.regions[i].text,
+                              previous,
+                              settings
+                            )
+                          }
                           className="mx-auto"
                           style={{ width: `${zoom * 100}%` }}
                         />

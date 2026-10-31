@@ -18,6 +18,7 @@ import { GlassPanel } from "@/components/glass/glass-panel"
 import { LayoutCanvas } from "@/components/layout/layout-canvas"
 import { useZoom, ZoomControl } from "@/components/layout/zoom-control"
 import { Markdown } from "@/components/result/blocks"
+import { JobBanner, type JobProgress } from "@/components/result/job-banner"
 import {
   ErrorDetail,
   errorHint,
@@ -52,7 +53,7 @@ import { hz } from "@/lib/hz"
 import { useT, useUiLang } from "@/lib/i18n"
 import { pdfLayout, releaseLayout, type LayoutPage } from "@/lib/layout"
 import { layoutHtml } from "@/lib/layout-export"
-import { translatePieces } from "@/lib/layout-translate"
+import { retranslatePiece, translatePieces } from "@/lib/layout-translate"
 import { recognize } from "@/lib/ocr"
 import { openPdf, pageText, renderPage, type PDFDocumentProxy } from "@/lib/pdf"
 import { buildRequest } from "@/lib/request"
@@ -149,6 +150,7 @@ const STOP_ON: ErrorCode[] = [
   "blocked",
   "needs-login",
   "not-installed",
+  "unavailable",
 ]
 
 /** Pages go out in chunks of whole paragraphs, small enough to resume after a stop. */
@@ -214,17 +216,23 @@ function LayoutCard({
   lang,
   running,
   zoom,
+  job,
   onTranslate,
   onShown,
+  onFix,
+  onRetranslate,
 }: {
   doc: PDFDocumentProxy
   p: PageState
   lang: string
   running: boolean
   zoom: number
+  job?: JobProgress
   onTranslate: () => void
   /** The card came into view without its pictures (restored from a saved session). */
   onShown: () => void
+  onFix: (i: number, text: string) => void
+  onRetranslate: (i: number, previous: string) => Promise<string>
 }) {
   const t = useT()
   const ui = useUiLang()
@@ -312,19 +320,36 @@ function LayoutCard({
             {lay?.status === "error" && lay.error && (
               <PageError error={lay.error} />
             )}
-            {lay?.page ? (
-              total ? (
-                <LayoutCanvas page={lay.page} tr={lay.tr} lang={lang} />
+            <div className="relative">
+              {busy && job && (
+                // Over the page being translated, so it stays level with the original.
+                <JobBanner
+                  job={job}
+                  className="absolute inset-x-3 top-3 z-10 bg-popover/95 text-popover-foreground shadow-lg ring-1 ring-border"
+                />
+              )}
+              {lay?.page ? (
+                total ? (
+                  <LayoutCanvas
+                    page={lay.page}
+                    tr={lay.tr}
+                    lang={lang}
+                    onFix={onFix}
+                    onRetranslate={onRetranslate}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t("layoutNoText")}
+                  </p>
+                )
+              ) : busy || needsPage ? (
+                <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {t("layoutNoText")}
+                  {t("layoutHint")}
                 </p>
-              )
-            ) : busy || needsPage ? (
-              <Skeleton className="aspect-[1/1.414] w-full rounded-lg" />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("layoutHint")}</p>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -430,6 +455,30 @@ export function PdfView() {
   }
   const patch = (n: number, p: Partial<PageState>) =>
     setAll(pagesRef.current.map((x) => (x.n === n ? { ...x, ...p } : x)))
+
+  /** Each page being translated: what its request is doing, for its banner. */
+  const [jobs, setJobs] = useState<Record<number, JobProgress>>({})
+  const track = (n: number, p: Partial<JobProgress> | null) =>
+    setJobs((cur) => {
+      if (!p) {
+        const rest = { ...cur }
+        delete rest[n]
+        return rest
+      }
+      const base: JobProgress = cur[n] ?? {
+        startedAt: Date.now(),
+        receiving: false,
+      }
+      return { ...cur, [n]: { ...base, ...p } }
+    })
+  /** A new request for the page: its clock starts again. */
+  const restart = (n: number, label?: JobProgress["label"]) =>
+    track(n, {
+      startedAt: Date.now(),
+      receiving: false,
+      stage: undefined,
+      label,
+    })
 
   /** `saved`: the work kept from the last session, when reopening its file. */
   const load = async (
@@ -543,6 +592,19 @@ export function PdfView() {
 
   const translatePage = useCallback(
     async (n: number, signal: AbortSignal) => {
+      try {
+        return await translateText(n, signal)
+      } finally {
+        track(n, null)
+      }
+    },
+    // translateText only touches refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc, settings]
+  )
+
+  const translateText = useCallback(
+    async (n: number, signal: AbortSignal) => {
       if (!doc) return
       const page = pagesRef.current.find((p) => p.n === n)
       if (!page) return
@@ -550,6 +612,7 @@ export function PdfView() {
       if (signal.aborted) return
       if (!text.trim()) {
         patch(n, { status: "ocr" })
+        restart(n, "ocrRunning")
         const canvas = await renderPage(await doc.getPage(n), 1400)
         text = await recognize(canvas, settings.sourceLang)
         patch(n, { text, status: "idle" })
@@ -571,6 +634,8 @@ export function PdfView() {
       })
       for (let i = parts.length; i < chunks.length; i++) {
         const before = parts.join("\n\n")
+        restart(n)
+        let receiving = false
         try {
           const req = {
             ...buildRequest(settings, { text: chunks[i] }),
@@ -578,11 +643,17 @@ export function PdfView() {
           }
           const out = await translateAsync(
             req,
-            (partial) =>
+            (partial) => {
+              if (!receiving && partial.trim()) {
+                receiving = true
+                track(n, { receiving })
+              }
               patch(n, {
                 result: before ? `${before}\n\n${partial}` : partial,
-              }),
-            signal
+              })
+            },
+            signal,
+            (stage, detail) => track(n, { stage: { stage, detail } })
           )
           parts.push(out.trim())
           patch(n, { parts: [...parts], result: parts.join("\n\n") })
@@ -624,10 +695,14 @@ export function PdfView() {
       try {
         if (!page) {
           patchLayout(n, { status: "reading", error: undefined })
+          restart(n, "layoutReading")
           page = await pdfLayout(
             await doc.getPage(n),
             settings.sourceLang,
-            () => patchLayout(n, { status: "ocr" })
+            () => {
+              patchLayout(n, { status: "ocr" })
+              track(n, { label: "ocrRunning" })
+            }
           )
           // Translations saved last session still fit if the page reads the same.
           patchLayout(n, {
@@ -649,7 +724,11 @@ export function PdfView() {
             tr = tr.map((x, k) => (k === i ? text : x))
             patchLayout(n, { tr })
           },
-          signal
+          signal,
+          {
+            onProgress: (p) =>
+              !p.stage && !p.receiving ? restart(n) : track(n, p),
+          }
         )
         patchLayout(n, { status: "done" })
       } catch (e) {
@@ -660,6 +739,8 @@ export function PdfView() {
           error: { message: err.message, code: err.code },
         })
         return err
+      } finally {
+        track(n, null)
       }
     },
     // patchLayout only touches refs and state setters.
@@ -700,6 +781,19 @@ export function PdfView() {
   }
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  /** The reader's own wording for one region of a page. */
+  const fixRegion = (n: number, i: number, text: string) => {
+    const lay = pagesRef.current.find((x) => x.n === n)?.layout
+    if (lay) patchLayout(n, { tr: lay.tr.map((x, k) => (k === i ? text : x)) })
+  }
+  /** Another translation of one region, for the reader to look at before saving. */
+  const retranslateRegion = async (n: number, i: number, previous: string) => {
+    const region = pagesRef.current.find((x) => x.n === n)?.layout?.page
+      ?.regions[i]
+    if (!region) throw new Error("This page is no longer open.")
+    return retranslatePiece(region.text, previous, settings)
+  }
 
   /** Pages restored with translations but no pictures, drawn again one at a time. */
   const drawing = useRef(new Set<number>())
@@ -987,8 +1081,13 @@ export function PdfView() {
                       lang={settings.targetLang}
                       running={running}
                       zoom={zoom}
+                      job={jobs[p.n]}
                       onTranslate={() => void run(p.n)}
                       onShown={() => void redraw(p.n)}
+                      onFix={(i, text) => fixRegion(p.n, i, text)}
+                      onRetranslate={(i, previous) =>
+                        retranslateRegion(p.n, i, previous)
+                      }
                     />
                   ) : (
                     <GlassPanel
@@ -1058,6 +1157,8 @@ export function PdfView() {
                             </Button>
                           )}
                         </div>
+                        {(p.status === "working" || p.status === "ocr") &&
+                          jobs[p.n] && <JobBanner job={jobs[p.n]} />}
                         {p.result ? (
                           <div
                             className={cn(

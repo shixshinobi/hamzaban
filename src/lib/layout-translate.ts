@@ -1,4 +1,4 @@
-import type { Settings } from "@shared/types"
+import type { JobStage, Settings } from "@shared/types"
 import { buildRequest } from "./request"
 import { translateAsync } from "./translate-async"
 
@@ -21,7 +21,16 @@ export async function translatePieces(
   done: (string | null)[],
   settings: Settings,
   onPiece: (i: number, text: string) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  opts: {
+    /** Where the request is, for the page's progress banner. */
+    onProgress?: (p: {
+      stage?: { stage: JobStage; detail?: string }
+      receiving: boolean
+    }) => void
+    /** Added to the instruction, e.g. what was wrong with an earlier translation. */
+    note?: string
+  } = {}
 ) {
   const todo = texts.map((_, i) => i).filter((i) => done[i] == null)
   const got = new Set<number>()
@@ -33,9 +42,15 @@ export async function translatePieces(
   async function run(batch: number[]) {
     const text = batch.map((i, k) => `[${k + 1}] ${texts[i]}`).join("\n\n")
     const req = {
-      ...buildRequest(settings, { text, extraInstruction: INSTRUCTION }),
+      ...buildRequest(settings, {
+        text,
+        extraInstruction: opts.note
+          ? `${INSTRUCTION} ${opts.note}`
+          : INSTRUCTION,
+      }),
       smart: false,
     }
+    opts.onProgress?.({ receiving: false })
     const take = (out: string, final: boolean) => {
       const pieces = parsePieces(out)
       // A lone piece sometimes comes back without its marker.
@@ -50,10 +65,19 @@ export async function translatePieces(
         onPiece(i, t)
       }
     }
+    let receiving = false
     const out = await translateAsync(
       req,
-      (partial) => take(partial, false),
-      signal
+      (partial) => {
+        if (!receiving && partial.trim()) {
+          receiving = true
+          opts.onProgress?.({ receiving })
+        }
+        take(partial, false)
+      },
+      signal,
+      (stage, detail) =>
+        opts.onProgress?.({ stage: { stage, detail }, receiving })
     )
     take(out, true)
   }
@@ -98,4 +122,22 @@ export function parsePieces(out: string) {
     if (!pieces.has(k)) pieces.set(k, text)
   })
   return pieces
+}
+
+/**
+ * Translate one piece again, after the reader marked its translation as wrong. The
+ * earlier attempt goes with it, so the engine does not hand the same words back.
+ */
+export async function retranslatePiece(
+  text: string,
+  previous: string,
+  settings: Settings,
+  signal = new AbortController().signal
+) {
+  let out = ""
+  await translatePieces([text], [null], settings, (_, t) => (out = t), signal, {
+    note: `The reader found this earlier translation of the piece wrong: «${previous}». Translate the piece again, more accurately and faithfully to the original.`,
+  })
+  if (!out) throw new Error("The engine returned no translation.")
+  return out
 }

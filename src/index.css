@@ -226,6 +226,23 @@ html[data-material="live"].dark {
 html[data-material="live"] .window-shell {
   background: transparent;
 }
+/* A transparent window gets no rounded corners or edge from Windows, so the shell draws
+   them like the OS ones, and leaves them off when the window fills the screen. */
+html:is([data-material="clear"], [data-material="live"]):not([data-maximized])
+  .window-shell {
+  border-radius: 8px;
+}
+/* The edge sits above everything, or the live picture would cover it. */
+html:is([data-material="clear"], [data-material="live"]):not([data-maximized])
+  .window-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px oklch(0.5 0 0 / 0.28);
+  pointer-events: none;
+}
 .live-backdrop {
   position: absolute;
   inset: 0;
@@ -292,6 +309,66 @@ html[data-material="live"] .window-shell {
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+}
+
+/* The free-models announcement in Settings: lit with the accent so it stands out from
+   the plain engine rows, in light and dark. */
+.free-models-banner {
+  background:
+    radial-gradient(
+      120% 140% at 100% 0%,
+      color-mix(in oklch, var(--primary) 26%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      90% 120% at 0% 100%,
+      color-mix(in oklch, var(--primary) 14%, transparent),
+      transparent 70%
+    ),
+    color-mix(in oklch, var(--card) 70%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--primary) 38%, transparent),
+    0 10px 30px -18px color-mix(in oklch, var(--primary) 70%, transparent);
+}
+
+/* Correcting an in-place translation: a region that can be fixed is outlined on hover,
+   with a pencil at its corner. Only on screen; exports carry neither. */
+.hz-r[data-fixable]:hover,
+.hz-r[data-fixable]:has(.hz-fix[data-popup-open]) {
+  outline: 1.5px dashed color-mix(in oklch, var(--primary) 75%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.hz-fix {
+  position: absolute;
+  top: -9px;
+  inset-inline-end: -9px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 2px 8px -2px oklch(0 0 0 / 0.4);
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+  cursor: pointer;
+}
+.hz-fix svg {
+  width: 12px;
+  height: 12px;
+}
+.hz-r:hover .hz-fix,
+.hz-fix:focus-visible,
+.hz-fix[data-popup-open] {
+  opacity: 1;
+  transform: none;
 }
 
 /* ---------- liquid glass ---------- */

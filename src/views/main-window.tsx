@@ -127,9 +127,14 @@ export function MainWindow() {
     const offConflict = hz.shortcuts.onConflict((actions) =>
       toast.warning(t("shortcutConflict"), { description: actions.join("، ") })
     )
+    // Rounded corners are drawn by the page for transparent windows (see index.css).
+    const offMax = hz.app.onMaximized((max) =>
+      document.documentElement.toggleAttribute("data-maximized", max)
+    )
     return () => {
       offNav()
       offConflict()
+      offMax()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

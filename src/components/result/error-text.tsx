@@ -9,12 +9,16 @@ const TITLE: Partial<Record<ErrorCode, StringKey>> = {
   "not-installed": "errNotInstalled",
   network: "errNetwork",
   auth: "errAuth",
+  unavailable: "errUnavailable",
+  slow: "errSlow",
 }
 
 const HINT: Partial<Record<ErrorCode, StringKey>> = {
   held: "errHeldHint",
   quota: "errQuotaHint",
   blocked: "errBlockedHint",
+  unavailable: "errUnavailableHint",
+  slow: "errSlowHint",
 }
 
 /** What went wrong, in the interface language. */

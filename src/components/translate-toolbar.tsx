@@ -13,6 +13,7 @@ import { GlassPanel } from "@/components/glass/glass-panel"
 import { Button } from "@/components/ui/button"
 import { useT } from "@/lib/i18n"
 import { useApp, useActiveEngine } from "@/lib/store"
+import { cn } from "@/lib/utils"
 
 /** Language pair, engine, style and smart-layout controls shared by every translate screen. */
 export function TranslateToolbar({
@@ -38,6 +39,7 @@ export function TranslateToolbar({
     setSpin((n) => n + 1)
   }
 
+  const smart = settings.smartLayout && isLlm
   return (
     <GlassPanel className="flex h-12 shrink-0 items-center gap-1 rounded-[20px] px-2">
       <LanguagePicker
@@ -86,14 +88,26 @@ export function TranslateToolbar({
           render={
             <Toggle
               size="sm"
-              pressed={settings.smartLayout && isLlm}
+              pressed={smart}
               disabled={!isLlm}
               onPressedChange={(smartLayout) => void update({ smartLayout })}
               aria-label={t("smartLayout")}
+              // On, it reads as lit: tinted with the accent and outlined; off, it fades.
+              className={cn(
+                "transition-colors",
+                smart
+                  ? "bg-primary/15 text-primary ring-1 ring-primary/40 hover:bg-primary/20 hover:text-primary aria-pressed:bg-primary/15"
+                  : "text-muted-foreground"
+              )}
             />
           }
         >
-          <SparklesIcon data-icon="inline-start" />
+          <SparklesIcon
+            data-icon="inline-start"
+            className={cn(
+              smart ? "fill-primary/40 text-primary" : "opacity-60"
+            )}
+          />
           <span className="hidden lg:inline">{t("smartLayout")}</span>
         </TooltipTrigger>
         <TooltipContent className="max-w-64">

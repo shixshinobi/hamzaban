@@ -46,11 +46,13 @@ export const PROVIDER_INFO: Record<string, ProviderInfo> = {
         "با حساب رایگان برنامه‌ی توسعه‌دهندگان NVIDIA کار می‌کند.",
         "بیش از ۸۰ مدل دارد، از جمله DeepSeek، Kimi، Gemma و Mistral Large.",
         "برای ترجمه‌ی حجم زیاد، مثل یک کتاب کامل، بهترین گزینه‌ی رایگان است.",
+        "درخواست‌ها در صف می‌مانند و مدل‌های پرطرفدار در ساعت‌های شلوغ ممکن است بیش از یک دقیقه طول بکشند. در آزمایش ما openai/gpt-oss-20b در حدود ۱۰ ثانیه جواب داد.",
       ],
       en: [
         "Works with a free NVIDIA Developer Program account.",
         "Over 80 models, including DeepSeek, Kimi, Gemma and Mistral Large.",
         "The best free choice for large jobs such as a whole book.",
+        "Requests wait in a queue, and popular models can take over a minute at busy hours. In our test openai/gpt-oss-20b answered in about 10 seconds.",
       ],
     },
     steps: {

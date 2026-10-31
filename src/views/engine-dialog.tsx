@@ -1,12 +1,14 @@
-import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react"
+import { ExternalLinkIcon, LanguagesIcon, RefreshCwIcon } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { API_PRESETS, ENGINE_META } from "@shared/defaults"
 import { PROVIDER_INFO, TIER_ORDER } from "@shared/providers"
 import {
   bestGeminiModel,
+  byTranslationFit,
   isGeminiApi,
   modelNote,
+  translationFit,
   translationModels,
   type ModelNote,
 } from "@shared/models"
@@ -16,6 +18,7 @@ import {
   TIER_LABEL,
   UsagePanel,
 } from "@/components/engines/provider-info"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -64,6 +67,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { hz } from "@/lib/hz"
 import { useT, useUiLang, type StringKey } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 
 const NOTE_LABEL: Record<ModelNote, StringKey> = {
   best: "modelBest",
@@ -116,6 +120,13 @@ export function EngineDialog({
   })).filter((g) => g.presets.length)
   const lang = ui === "fa" ? "fa" : "en"
 
+  // Models fit for translation come first, under a heading of their own.
+  const fitModels = models.filter((m) => translationFit(m))
+  const modelGroups = [
+    { key: "fit", models: fitModels },
+    { key: "other", models: models.filter((m) => !translationFit(m)) },
+  ].filter((g) => g.models.length)
+
   const fetchModels = async () => {
     setLoading(true)
     try {
@@ -128,9 +139,12 @@ export function EngineDialog({
         }),
         draft.baseUrl
       )
-      setModels(list)
-      // For Gemini, move to the strongest text model this key can use.
-      const best = isGeminiApi(draft.baseUrl) ? bestGeminiModel(list) : null
+      const sorted = isGeminiApi(draft.baseUrl) ? list : byTranslationFit(list)
+      setModels(sorted)
+      // A model that is not on this key's list moves to the best one for translation.
+      const best = isGeminiApi(draft.baseUrl)
+        ? bestGeminiModel(list)
+        : (sorted.find((m) => translationFit(m) === "great") ?? null)
       if (best && !list.includes(draft.model ?? "")) {
         setDraft((d) => ({ ...d, model: best }))
         toast.success(`${t("modelPicked")} ${best}`)
@@ -300,36 +314,72 @@ export function EngineDialog({
                     </InputGroupAddon>
                   )}
                 </InputGroup>
-                <PopoverContent className="w-80 p-0" align="end">
+                <PopoverContent className="w-[min(30rem,90vw)] p-0" align="end">
                   <Command>
                     <CommandInput placeholder={t("model")} />
                     <CommandList className="max-h-72">
                       <CommandEmpty>—</CommandEmpty>
-                      <CommandGroup>
-                        {models.map((m) => (
-                          <CommandItem
-                            key={m}
-                            value={m}
-                            data-checked={m === draft.model}
-                            onSelect={() => {
-                              setDraft({ ...draft, model: m })
-                              setModelOpen(false)
-                            }}
-                          >
-                            <span
-                              dir="ltr"
-                              className="truncate font-mono text-xs"
-                            >
-                              {m}
-                            </span>
-                            {modelNote(m) && (
-                              <span className="ms-auto shrink-0 text-xs text-muted-foreground">
-                                {t(NOTE_LABEL[modelNote(m)!])}
+                      {modelGroups.map((g) => (
+                        <CommandGroup
+                          key={g.key}
+                          heading={
+                            g.key === "fit" ? (
+                              <span className="flex items-center gap-1 text-primary">
+                                <LanguagesIcon className="size-3.5" />
+                                {t("modelsForTranslation")}
                               </span>
-                            )}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
+                            ) : (
+                              t("modelsOther")
+                            )
+                          }
+                        >
+                          {g.models.map((m) => {
+                            const fit = translationFit(m)
+                            return (
+                              <CommandItem
+                                key={m}
+                                value={m}
+                                data-checked={m === draft.model}
+                                // Fit models stand out: tinted, in the foreground colour.
+                                className={cn(
+                                  fit && "bg-primary/[0.06] text-foreground",
+                                  !fit && "text-muted-foreground"
+                                )}
+                                onSelect={() => {
+                                  setDraft({ ...draft, model: m })
+                                  setModelOpen(false)
+                                }}
+                              >
+                                <span
+                                  dir="ltr"
+                                  className={cn(
+                                    "truncate font-mono text-xs",
+                                    fit && "font-semibold"
+                                  )}
+                                >
+                                  {m}
+                                </span>
+                                {modelNote(m) ? (
+                                  <span className="ms-auto shrink-0 text-xs text-muted-foreground">
+                                    {t(NOTE_LABEL[modelNote(m)!])}
+                                  </span>
+                                ) : fit ? (
+                                  <Badge
+                                    variant={
+                                      fit === "great" ? "default" : "secondary"
+                                    }
+                                    className="ms-auto shrink-0"
+                                  >
+                                    {t(
+                                      fit === "great" ? "fitGreat" : "fitGood"
+                                    )}
+                                  </Badge>
+                                ) : null}
+                              </CommandItem>
+                            )
+                          })}
+                        </CommandGroup>
+                      ))}
                     </CommandList>
                   </Command>
                 </PopoverContent>

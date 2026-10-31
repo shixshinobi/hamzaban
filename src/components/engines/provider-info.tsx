@@ -1,5 +1,13 @@
-import { ChevronDownIcon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react"
+import {
+  ChevronDownIcon,
+  ExternalLinkIcon,
+  GiftIcon,
+  RefreshCwIcon,
+  SparklesIcon,
+  XIcon,
+} from "lucide-react"
 import { useState } from "react"
+import { API_PRESETS } from "@shared/defaults"
 import {
   PROVIDER_INFO,
   PROVIDERS_CHECKED,
@@ -288,6 +296,83 @@ function Meter({
         </span>
       </div>
       <Progress value={(left / limit) * 100} className="h-1.5" />
+    </div>
+  )
+}
+
+/** The free providers the announcement points to, most free quota first. */
+const SHOWCASE = ["nvidia", "cerebras", "groq"]
+
+/**
+ * An announcement at the top of the engines list: strong models are free with a key,
+ * which nobody would guess before opening "Add API key". Shown until the user has a
+ * key from a free provider, or closes it.
+ */
+export function FreeModelsBanner({
+  hasFreeKey,
+  onAdd,
+}: {
+  hasFreeKey: boolean
+  onAdd: (presetId: string) => void
+}) {
+  const t = useT()
+  const ui = useUiLang()
+  const lang = ui === "fa" ? "fa" : "en"
+  const [closed, setClosed] = useState(() => {
+    try {
+      return localStorage.getItem("hz-free-models-banner") === "closed"
+    } catch {
+      return false
+    }
+  })
+  if (hasFreeKey || closed) return null
+  const close = () => {
+    setClosed(true)
+    try {
+      localStorage.setItem("hz-free-models-banner", "closed")
+    } catch {
+      // Closed for this session only.
+    }
+  }
+  return (
+    <div className="free-models-banner relative overflow-hidden rounded-2xl p-4">
+      <Button
+        size="icon-xs"
+        variant="ghost"
+        className="absolute end-2 top-2"
+        aria-label={t("dismiss")}
+        onClick={close}
+      >
+        <XIcon />
+      </Button>
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
+          <GiftIcon />
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 pe-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold">{t("freeModelsTitle")}</h3>
+            <Badge>{t("tierFree")}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">{t("freeModelsBody")}</p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {SHOWCASE.map((id) => (
+              <Button
+                key={id}
+                size="sm"
+                variant={id === SHOWCASE[0] ? "default" : "outline"}
+                onClick={() => onAdd(id)}
+                title={PROVIDER_INFO[id]?.quota[lang]}
+              >
+                {id === SHOWCASE[0] && (
+                  <SparklesIcon data-icon="inline-start" />
+                )}
+                {API_PRESETS.find((p) => p.id === id)?.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

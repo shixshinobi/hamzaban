@@ -67,7 +67,11 @@ import { useT, useUiLang, type StringKey } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
 import { applyAppearance } from "@/lib/theme"
 import { cn } from "@/lib/utils"
-import { UsageSummary } from "@/components/engines/provider-info"
+import {
+  FreeModelsBanner,
+  UsageSummary,
+} from "@/components/engines/provider-info"
+import { PROVIDER_INFO } from "@shared/providers"
 import { EngineDialog, newApiEngine } from "./engine-dialog"
 import { ShortcutRecorder } from "./shortcut-recorder"
 
@@ -629,6 +633,12 @@ function EngineSettings() {
           {t("addApiEngine")}
         </Button>
       </div>
+      <FreeModelsBanner
+        hasFreeKey={engines.some(
+          (e) => e.preset && PROVIDER_INFO[e.preset]?.tier === "free"
+        )}
+        onAdd={(id) => setEditing({ engine: newApiEngine(id), isNew: true })}
+      />
       <ItemGroup className="gap-2">
         {engines.map((e) => {
           const meta = ENGINE_META[e.kind]

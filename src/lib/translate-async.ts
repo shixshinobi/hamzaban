@@ -1,11 +1,15 @@
-import type { TranslateRequest } from "@shared/types"
+import type { JobStage, TranslateRequest } from "@shared/types"
 import { hz } from "./hz"
 
-/** Promise-style translation for batch work (PDF pages). Streams partial text to `onText`. */
+/**
+ * Promise-style translation for batch work (PDF pages). Streams partial text to
+ * `onText` and the request's stages (sending, thinking, retrying…) to `onStage`.
+ */
 export function translateAsync(
   req: TranslateRequest,
   onText?: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onStage?: (stage: JobStage, detail?: string) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const cancelled = () =>
@@ -19,6 +23,7 @@ export function translateAsync(
       if (e.type === "delta") acc += e.text
       if (e.type === "snapshot") acc = e.text
       if (e.type === "delta" || e.type === "snapshot") onText?.(acc)
+      if (e.type === "stage") onStage?.(e.stage, e.detail)
       if (e.type === "done") {
         off()
         resolve(e.text || acc)

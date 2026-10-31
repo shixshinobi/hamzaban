@@ -44,9 +44,17 @@ const STRINGS = {
   stageOpening: ["در حال باز کردن", "Opening"],
   stageAttaching: ["در حال پیوست کردن تصویر در", "Attaching the image in"],
   secondsShort: ["ثانیه", "s"],
-  waitLong: [
-    "ورودی بلند است و کمی بیشتر طول می‌کشد.",
-    "Long input, this takes a little longer.",
+  stageWriting: [
+    "مدل در حال نوشتن ترجمه است",
+    "The model is writing the translation",
+  ],
+  slowStart: [
+    "مدل هنوز جواب نداده. سرویس‌های رایگان گاهی شلوغ‌اند؛ کمی صبر کنید.",
+    "No answer from the model yet. Free services are sometimes busy; please wait a little.",
+  ],
+  slowStream: [
+    "پاسخ مدل کند است و دارد کم‌کم می‌رسد؛ لطفاً صبر کنید.",
+    "The model is answering slowly; please wait.",
   ],
   stop: ["توقف", "Stop"],
   retry: ["دوباره", "Retry"],
@@ -124,6 +132,19 @@ const STRINGS = {
     "Per-minute limit, waiting",
   ],
   errAuth: ["کلید یا دسترسی معتبر نیست", "Key or access is invalid"],
+  errUnavailable: [
+    "این مدل الان در دسترس نیست",
+    "This model is not available right now",
+  ],
+  errUnavailableHint: [
+    "سرویس این مدل را در فهرست دارد ولی الان اجرایش نمی‌کند. در تنظیمات موتور، مدل دیگری از بخش «مناسب ترجمه» انتخاب کنید.",
+    "The provider lists this model but is not running it now. Pick another model under “Good for translation” in the engine's settings.",
+  ],
+  errSlow: ["مدل در زمان مقرر جواب نداد", "The model did not answer in time"],
+  errSlowHint: [
+    "اتصال برقرار بود ولی سرویس شلوغ است و درخواست در صف ماند. کمی بعد دوباره امتحان کنید، یا در تنظیمات موتور مدل سریع‌تری از بخش «مناسب ترجمه» انتخاب کنید.",
+    "The connection worked, but the service is busy and the request sat in its queue. Try again shortly, or pick a quicker model under “Good for translation” in the engine's settings.",
+  ],
   errBlocked: [
     "این سرویس اتصال شما را نپذیرفت",
     "This service refused your connection",
@@ -393,6 +414,25 @@ const STRINGS = {
   usageFreeToday: ["درخواست‌های رایگان امروز", "Free requests today"],
   usageCheck: ["بررسی", "Check"],
   usageLeft: ["مانده", "left"],
+  freeModelsTitle: [
+    "مدل‌های قوی هوش مصنوعی، رایگان",
+    "Powerful AI models, free",
+  ],
+  freeModelsBody: [
+    "با یک کلید رایگان از NVIDIA، Cerebras یا Groq به مدل‌هایی مثل DeepSeek، Kimi و GPT-OSS دسترسی پیدا کنید و هر روز صدها صفحه ترجمه کنید، بی‌آن‌که چیزی بپردازید. گرفتن کلید چند دقیقه طول می‌کشد و راهنمایش همین‌جاست.",
+    "A free key from NVIDIA, Cerebras or Groq opens models such as DeepSeek, Kimi and GPT-OSS: hundreds of pages a day without paying. Getting a key takes a few minutes, and the steps are right here.",
+  ],
+  freeModelsAction: ["افزودن کلید رایگان", "Add a free key"],
+  dismiss: ["بستن", "Dismiss"],
+  fixTranslation: ["اصلاح ترجمه", "Fix the translation"],
+  fixOriginal: ["متن اصلی", "Original"],
+  fixYours: [
+    "ترجمه (می‌توانید خودتان درستش کنید)",
+    "Translation (you can correct it yourself)",
+  ],
+  fixAgain: ["ترجمه‌ی دوباره", "Translate again"],
+  fixSave: ["ذخیره", "Save"],
+  fixFailed: ["ترجمه‌ی دوباره انجام نشد", "Could not translate again"],
   modelPicked: [
     "مدل پیشنهادی برای ترجمه انتخاب شد:",
     "Picked the recommended translation model:",
@@ -400,6 +440,10 @@ const STRINGS = {
   modelBest: ["بهترین کیفیت، نیاز به billing", "Best quality, needs billing"],
   modelRecommended: ["پیشنهادی", "Recommended"],
   modelFast: ["سریع‌تر", "Faster"],
+  modelsForTranslation: ["مناسب ترجمه", "Good for translation"],
+  modelsOther: ["سایر مدل‌ها", "Other models"],
+  fitGreat: ["عالی برای ترجمه", "Great for translation"],
+  fitGood: ["مناسب ترجمه", "Good for translation"],
   executable: ["مسیر فایل اجرایی (اختیاری)", "Executable path (optional)"],
   statusReady: ["آماده", "Ready"],
   statusSignedOut: ["وارد نشده", "Signed out"],

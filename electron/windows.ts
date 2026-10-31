@@ -257,6 +257,22 @@ export function createMainWindow(show = true) {
     mainWin.setContentProtection(true)
   load(mainWin, "main")
   mainWin.once("ready-to-show", () => show && mainWin?.show())
+  // A transparent window gets no rounded corners from Windows, so the page draws them,
+  // except when the window fills the screen.
+  const win = mainWin
+  const sendMaximized = () =>
+    win.webContents.send(
+      "window:maximized",
+      win.isMaximized() || win.isFullScreen()
+    )
+  for (const ev of [
+    "maximize",
+    "unmaximize",
+    "enter-full-screen",
+    "leave-full-screen",
+  ] as const)
+    win.on(ev as "maximize", sendMaximized)
+  win.webContents.on("did-finish-load", sendMaximized)
   mainWin.on("close", (e) => {
     if (!(app as unknown as { quitting?: boolean }).quitting) {
       e.preventDefault()

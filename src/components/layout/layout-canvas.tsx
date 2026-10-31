@@ -1,5 +1,19 @@
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { PencilIcon, RotateCcwIcon } from "lucide-react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { isRtl } from "@shared/languages"
+import { Button } from "@/components/ui/button"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import {
+  Popover,
+  PopoverContent,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
+import { useT } from "@/lib/i18n"
 import { loadImage, regionStyle, type LayoutPage } from "@/lib/layout"
 import { fitText, LAYOUT_CSS } from "@/lib/layout-fit"
 import { cn } from "@/lib/utils"
@@ -36,12 +50,18 @@ export function LayoutCanvas({
   lang,
   className,
   style,
+  onFix,
+  onRetranslate,
 }: {
   page: LayoutPage
   tr: (string | null)[]
   lang: string
   className?: string
   style?: React.CSSProperties
+  /** Set when the reader may correct a region: saves their wording for it. */
+  onFix?: (i: number, text: string) => void
+  /** Translates one region again and gives back the new wording (not yet saved). */
+  onRetranslate?: (i: number, previous: string) => Promise<string>
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const patches = useRef<HTMLCanvasElement>(null)
@@ -115,6 +135,7 @@ export function LayoutCanvas({
             className="hz-r"
             data-fit=""
             data-multi={r.pitch ? "" : undefined}
+            data-fixable={onFix ? "" : undefined}
             style={regionStyle(r, lang)}
             title={r.text}
           >
@@ -122,9 +143,127 @@ export function LayoutCanvas({
               {r.marker && <span className="hz-mark">{r.marker}</span>}
               {tr[i]}
             </div>
+            {onFix && (
+              <RegionFix
+                original={r.text}
+                text={tr[i]!}
+                dir={dir}
+                onSave={(text) => onFix(i, text)}
+                onAgain={
+                  onRetranslate ? () => onRetranslate(i, tr[i]!) : undefined
+                }
+              />
+            )}
           </div>
         ) : null
       )}
     </div>
+  )
+}
+
+/**
+ * The pencil on a translated region: shows the original, lets the reader type the
+ * right wording, or asks the engine for another translation of just this region.
+ */
+function RegionFix({
+  original,
+  text,
+  dir,
+  onSave,
+  onAgain,
+}: {
+  original: string
+  text: string
+  dir: "rtl" | "ltr"
+  onSave: (text: string) => void
+  onAgain?: () => Promise<string>
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(text)
+  const [busy, setBusy] = useState(false)
+  const again = async () => {
+    if (!onAgain) return
+    setBusy(true)
+    try {
+      setDraft(await onAgain())
+    } catch (e) {
+      toast.error(t("fixFailed"), { description: (e as Error).message })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (o) setDraft(text)
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="hz-fix"
+            aria-label={t("fixTranslation")}
+            title={t("fixTranslation")}
+          />
+        }
+      >
+        <PencilIcon />
+      </PopoverTrigger>
+      <PopoverContent className="w-80" align="end">
+        <PopoverHeader>
+          <PopoverTitle>{t("fixTranslation")}</PopoverTitle>
+        </PopoverHeader>
+        <Field>
+          <FieldLabel>{t("fixOriginal")}</FieldLabel>
+          <FieldDescription
+            dir="auto"
+            className="selectable max-h-28 overflow-y-auto rounded-md bg-muted/50 p-2"
+          >
+            {original}
+          </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="hz-fix-text">{t("fixYours")}</FieldLabel>
+          <Textarea
+            id="hz-fix-text"
+            dir={dir}
+            value={draft}
+            rows={4}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </Field>
+        <div className="flex justify-end gap-2">
+          {onAgain && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void again()}
+            >
+              {busy ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <RotateCcwIcon data-icon="inline-start" />
+              )}
+              {t("fixAgain")}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            disabled={busy || !draft.trim()}
+            onClick={() => {
+              onSave(draft.trim())
+              setOpen(false)
+            }}
+          >
+            {t("fixSave")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -83,7 +83,9 @@ export const API_PRESETS: ApiPreset[] = [
     name: "NVIDIA NIM",
     kind: "openai",
     baseUrl: "https://integrate.api.nvidia.com/v1",
-    model: "deepseek-ai/deepseek-v4.1-flash",
+    // The quickest to answer in a test in October 2026; the popular large models
+    // often sat in the queue for over a minute.
+    model: "openai/gpt-oss-20b",
     keyUrl: "https://build.nvidia.com",
   },
   {

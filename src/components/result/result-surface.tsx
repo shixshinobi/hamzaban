@@ -8,7 +8,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react"
 import { motion } from "motion/react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import {
   blocksToText,
   parseBlocks,
@@ -17,7 +17,6 @@ import {
   type Layout,
 } from "@shared/blocks"
 import { isRtl, textDir } from "@shared/languages"
-import type { JobStage } from "@shared/types"
 import {
   Alert,
   AlertAction,
@@ -27,13 +26,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { hz } from "@/lib/hz"
-import { useT, useUiLang, type StringKey } from "@/lib/i18n"
+import { useT, useUiLang } from "@/lib/i18n"
 import { useApp } from "@/lib/store"
 import type { TranslationState } from "@/lib/use-translation"
 import { cn } from "@/lib/utils"
 import { Appear, BlockView, Markdown } from "./blocks"
 import { DictionaryView, fromBlocks, fromGoogle } from "./dictionary-view"
 import { ErrorDetail, errorHint, errorTitle } from "./error-text"
+import { STAGE_LABEL, useElapsed } from "./job-banner"
 
 export interface ResultModel {
   layout: Layout
@@ -83,25 +83,6 @@ export function useResultModel(state: TranslationState): ResultModel {
   }, [state])
 }
 
-const STAGE_LABEL: Record<JobStage, StringKey> = {
-  sending: "stageSending",
-  thinking: "stageThinking",
-  retrying: "stageRetrying",
-  waiting: "stageWaiting",
-  opening: "stageOpening",
-  attaching: "stageAttaching",
-}
-
-/** Seconds since `since`, ticking once a second while mounted. */
-function useElapsed(since: number) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
-  return since ? Math.max(0, Math.floor((now - since) / 1000)) : 0
-}
-
 function LoadingShape({
   layout,
   state,
@@ -140,7 +121,7 @@ function LoadingShape({
       </div>
       <div className="indeterminate h-0.5 overflow-hidden rounded-full bg-muted" />
       {seconds >= 20 && (
-        <p className="text-xs text-muted-foreground">{t("waitLong")}</p>
+        <p className="text-xs text-muted-foreground">{t("slowStart")}</p>
       )}
       {layout === "dictionary" ? (
         <>
