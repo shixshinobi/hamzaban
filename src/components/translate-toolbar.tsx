@@ -92,21 +92,22 @@ export function TranslateToolbar({
               disabled={!isLlm}
               onPressedChange={(smartLayout) => void update({ smartLayout })}
               aria-label={t("smartLayout")}
-              // On, it reads as lit: tinted with the accent and outlined; off, it fades.
+              // On: the text in full colour and the icon lit with the accent. Off: faded
+              // well back, so the two states cannot be mistaken.
               className={cn(
-                "transition-colors",
+                "transition-[color,opacity]",
                 smart
-                  ? "bg-primary/15 text-primary ring-1 ring-primary/40 hover:bg-primary/20 hover:text-primary aria-pressed:bg-primary/15"
-                  : "text-muted-foreground"
+                  ? // Hovered, it shows as a button like its neighbours, so it reads as
+                    // something to click to turn it off.
+                    "text-foreground aria-pressed:bg-transparent aria-pressed:hover:bg-muted"
+                  : "text-muted-foreground opacity-45 hover:opacity-80"
               )}
             />
           }
         >
           <SparklesIcon
             data-icon="inline-start"
-            className={cn(
-              smart ? "fill-primary/40 text-primary" : "opacity-60"
-            )}
+            className={cn(smart && "fill-primary/40 text-primary")}
           />
           <span className="hidden lg:inline">{t("smartLayout")}</span>
         </TooltipTrigger>

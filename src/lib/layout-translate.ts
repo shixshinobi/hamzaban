@@ -25,7 +25,7 @@ export async function translatePieces(
   opts: {
     /** Where the request is, for the page's progress banner. */
     onProgress?: (p: {
-      stage?: { stage: JobStage; detail?: string }
+      stage?: { stage: JobStage; detail?: string; limit?: number; at: number }
       receiving: boolean
     }) => void
     /** Added to the instruction, e.g. what was wrong with an earlier translation. */
@@ -76,8 +76,11 @@ export async function translatePieces(
         take(partial, false)
       },
       signal,
-      (stage, detail) =>
-        opts.onProgress?.({ stage: { stage, detail }, receiving })
+      (stage, detail, limit) =>
+        opts.onProgress?.({
+          stage: { stage, detail, limit, at: Date.now() },
+          receiving,
+        })
     )
     take(out, true)
   }

@@ -18,7 +18,8 @@ export interface EngineContext {
   snapshot: (text: string) => void
   dictionary: (data: DictionaryData) => void
   /** Report progress before the answer starts. */
-  stage: (stage: JobStage, detail?: string) => void
+  /** `limit`: seconds this step may take before it is given up, when there is one. */
+  stage: (stage: JobStage, detail?: string, limit?: number) => void
   detected: (lang: string) => void
   /** Writes the request image to a temp PNG and returns its path. */
   imageFile: () => Promise<string>

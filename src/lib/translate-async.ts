@@ -9,7 +9,7 @@ export function translateAsync(
   req: TranslateRequest,
   onText?: (text: string) => void,
   signal?: AbortSignal,
-  onStage?: (stage: JobStage, detail?: string) => void
+  onStage?: (stage: JobStage, detail?: string, limit?: number) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const cancelled = () =>
@@ -23,7 +23,7 @@ export function translateAsync(
       if (e.type === "delta") acc += e.text
       if (e.type === "snapshot") acc = e.text
       if (e.type === "delta" || e.type === "snapshot") onText?.(acc)
-      if (e.type === "stage") onStage?.(e.stage, e.detail)
+      if (e.type === "stage") onStage?.(e.stage, e.detail, e.limit)
       if (e.type === "done") {
         off()
         resolve(e.text || acc)

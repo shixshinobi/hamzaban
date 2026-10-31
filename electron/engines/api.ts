@@ -173,7 +173,6 @@ async function openAIOnce(
       name,
       ...(extra === undefined ? [] : [extra])
     )
-  stage("sending")
   step("request", {
     host: new URL(base).host,
     model,
@@ -192,6 +191,7 @@ async function openAIOnce(
   // models wait in a queue first, often for more than a minute at busy hours.
   const nvidia = base.includes("integrate.api.nvidia.com")
   const firstWait = isGeminiApi(base) ? 60 : nvidia ? 180 : 90
+  stage("sending", undefined, firstWait)
   armIdle(firstWait * 1000)
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",

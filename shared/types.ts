@@ -124,7 +124,14 @@ export type JobStage =
 export type TranslateEvent =
   | { jobId: string; type: "start"; engineId: string; engineName: string }
   /** `detail` carries the model being tried when the stage is "retrying". */
-  | { jobId: string; type: "stage"; stage: JobStage; detail?: string }
+  | {
+      jobId: string
+      type: "stage"
+      stage: JobStage
+      detail?: string
+      /** Seconds the step may take before it is given up. */
+      limit?: number
+    }
   | { jobId: string; type: "delta"; text: string }
   /** Full replacement of the accumulated text (web/CLI engines report snapshots). */
   | { jobId: string; type: "snapshot"; text: string }

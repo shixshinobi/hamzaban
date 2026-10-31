@@ -6,6 +6,7 @@ import {
   LanguagesIcon,
   PauseIcon,
   PlayIcon,
+  ScanTextIcon,
   SquareIcon,
   TriangleAlertIcon,
 } from "lucide-react"
@@ -18,7 +19,7 @@ import { GlassPanel } from "@/components/glass/glass-panel"
 import { LayoutCanvas } from "@/components/layout/layout-canvas"
 import { useZoom, ZoomControl } from "@/components/layout/zoom-control"
 import { Markdown } from "@/components/result/blocks"
-import { JobBanner, type JobProgress } from "@/components/result/job-banner"
+import { JobStatus, type JobProgress } from "@/components/result/job-banner"
 import {
   ErrorDetail,
   errorHint,
@@ -304,9 +305,9 @@ function LayoutCard({
           style={{ width: `${zoom * 100}%` }}
         >
           <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground">
+            <div className="flex h-6 items-center text-xs text-muted-foreground">
               {t("originalPage")}
-            </span>
+            </div>
             {lay?.page ? (
               <LayoutCanvas page={lay.page} tr={[]} lang={lang} />
             ) : (
@@ -314,20 +315,14 @@ function LayoutCard({
             )}
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground">
-              {t("translatedPage")}
-            </span>
+            <div className="flex h-6 items-center gap-3 text-xs text-muted-foreground">
+              <span className="shrink-0">{t("translatedPage")}</span>
+              {busy && job && <JobStatus job={job} className="ms-auto" />}
+            </div>
             {lay?.status === "error" && lay.error && (
               <PageError error={lay.error} />
             )}
-            <div className="relative">
-              {busy && job && (
-                // Over the page being translated, so it stays level with the original.
-                <JobBanner
-                  job={job}
-                  className="absolute inset-x-3 top-3 z-10 bg-popover/95 text-popover-foreground shadow-lg ring-1 ring-border"
-                />
-              )}
+            <div>
               {lay?.page ? (
                 total ? (
                   <LayoutCanvas
@@ -419,9 +414,9 @@ export function PdfView() {
   const [view, setViewState] = useState<View>(() => {
     try {
       const v = localStorage.getItem("hz-pdf-view")
-      return v === "only" || v === "layout" ? v : "side"
+      return v === "side" || v === "only" ? v : "layout"
     } catch {
-      return "side"
+      return "layout"
     }
   })
   const setView = (v: View) => {
@@ -653,7 +648,8 @@ export function PdfView() {
               })
             },
             signal,
-            (stage, detail) => track(n, { stage: { stage, detail } })
+            (stage, detail, limit) =>
+              track(n, { stage: { stage, detail, limit, at: Date.now() } })
           )
           parts.push(out.trim())
           patch(n, { parts: [...parts], result: parts.join("\n\n") })
@@ -824,6 +820,7 @@ export function PdfView() {
     })
   }
 
+  const num = (v: number) => v.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")
   const inPlace = view === "layout"
   const doneCount = pages.filter(
     (p) => (inPlace ? p.layout?.status : p.status) === "done"
@@ -939,28 +936,50 @@ export function PdfView() {
             ) : (
               <FileTextIcon className="size-4 text-muted-foreground" />
             )}
-            <span className="max-w-60 truncate text-sm font-medium" dir="auto">
+            <span
+              className="max-w-60 min-w-16 truncate text-sm font-medium"
+              dir="auto"
+              title={opening ?? name}
+            >
               {opening ?? name}
             </span>
             <Badge variant="secondary">
               {pages.length.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")}{" "}
               {t("pages")}
             </Badge>
-            <div className="mx-2 flex max-w-56 flex-1 items-center gap-2">
-              <Progress
-                value={pages.length ? (doneCount / pages.length) * 100 : 0}
-                className="h-1.5"
-              />
-              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                {doneCount}/{pages.length}
-              </span>
-            </div>
-            {extracted < pages.length && (
-              <span className="shimmer-text shrink-0 text-xs">
-                {t("pdfReading")}{" "}
-                {extracted.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")}/
-                {pages.length.toLocaleString(ui === "fa" ? "fa-IR" : "en-US")}
-              </span>
+            {/* One slot, sized by the window and never by its figures, so only the
+                numbers change as pages are read and translated. While the text is
+                still being read it shows that; then the translation's progress. */}
+            {extracted < pages.length ? (
+              <div
+                className="mx-2 flex min-w-36 flex-[0_1_15rem] items-center gap-2 text-xs text-muted-foreground"
+                title={t("pdfReading")}
+              >
+                {/* An icon, not words: the toolbar is crowded at narrow widths. */}
+                <ScanTextIcon className="size-3.5 shrink-0 animate-pulse" />
+                <span className="sr-only">{t("pdfReading")}</span>
+                <Progress
+                  value={(extracted / pages.length) * 100}
+                  className="h-1 min-w-6 flex-1"
+                />
+                <span className="w-[9ch] shrink-0 text-end tabular-nums">
+                  {num(extracted)}/{num(pages.length)}
+                </span>
+              </div>
+            ) : (
+              <div
+                className="mx-2 flex min-w-36 flex-[0_1_15rem] items-center gap-2 text-xs text-muted-foreground"
+                title={t("pdfTranslatedPages")}
+              >
+                <LanguagesIcon className="size-3.5 shrink-0" />
+                <Progress
+                  value={pages.length ? (doneCount / pages.length) * 100 : 0}
+                  className="h-1.5 min-w-6 flex-1"
+                />
+                <span className="w-[9ch] shrink-0 text-end tabular-nums">
+                  {num(doneCount)}/{num(pages.length)}
+                </span>
+              </div>
             )}
             <div className="flex-1" />
             {view === "layout" && (
@@ -1125,14 +1144,12 @@ export function PdfView() {
                               ui === "fa" ? "fa-IR" : "en-US"
                             )}
                           </Badge>
-                          {p.status === "working" && (
-                            <Spinner className="size-3.5" />
-                          )}
-                          {p.status === "ocr" && (
-                            <span className="shimmer-text text-xs">
-                              {t("ocrRunning")}
-                            </span>
-                          )}
+                          {(p.status === "working" || p.status === "ocr") &&
+                            (jobs[p.n] ? (
+                              <JobStatus job={jobs[p.n]} />
+                            ) : (
+                              <Spinner className="size-3.5" />
+                            ))}
                           {p.status === "done" && p.result && (
                             <CheckIcon className="size-3.5 text-success" />
                           )}
@@ -1157,8 +1174,6 @@ export function PdfView() {
                             </Button>
                           )}
                         </div>
-                        {(p.status === "working" || p.status === "ocr") &&
-                          jobs[p.n] && <JobBanner job={jobs[p.n]} />}
                         {p.result ? (
                           <div
                             className={cn(

@@ -13,7 +13,7 @@ import { toast } from "sonner"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { GlassPanel } from "@/components/glass/glass-panel"
 import { LayoutCanvas } from "@/components/layout/layout-canvas"
-import { JobBanner } from "@/components/result/job-banner"
+import { JobStatus } from "@/components/result/job-banner"
 import { useZoom, ZoomControl } from "@/components/layout/zoom-control"
 import {
   ErrorDetail,
@@ -362,6 +362,9 @@ export function ImageView() {
                 </span>
               )}
               <div className="flex-1" />
+              {mode === "layout" && layBusy && lay.progress && (
+                <JobStatus job={lay.progress} className="max-w-64" />
+              )}
               {busy ? (
                 <Button
                   size="sm"
@@ -448,13 +451,6 @@ export function ImageView() {
                         <ErrorDetail message={lay.error.message} />
                       </AlertDescription>
                     </Alert>
-                  )}
-                  {layBusy && lay.progress && (
-                    // Over the picture being translated; the list scrolls under it.
-                    <JobBanner
-                      job={lay.progress}
-                      className="sticky top-2 z-10 -mb-14 bg-popover/95 text-popover-foreground shadow-lg ring-1 ring-border"
-                    />
                   )}
                   {lay.page ? (
                     lay.page.regions.length ? (

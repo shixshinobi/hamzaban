@@ -97,7 +97,8 @@ async function execute(
         emit({ jobId, type: "snapshot", text: t })
       },
       dictionary: (data) => emit({ jobId, type: "dictionary", data }),
-      stage: (stage, detail) => emit({ jobId, type: "stage", stage, detail }),
+      stage: (stage, detail, limit) =>
+        emit({ jobId, type: "stage", stage, detail, limit }),
       detected: (lang) => emit({ jobId, type: "detected", lang }),
       imageFile: async () => {
         if (tmpImage) return tmpImage

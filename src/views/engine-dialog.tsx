@@ -350,31 +350,36 @@ export function EngineDialog({
                                   setModelOpen(false)
                                 }}
                               >
+                                {/* The name takes the row; the label sits in a column of
+                                    its own on the other side, the same for every model. */}
                                 <span
                                   dir="ltr"
                                   className={cn(
-                                    "truncate font-mono text-xs",
+                                    "min-w-0 flex-1 truncate font-mono text-xs rtl:text-right",
                                     fit && "font-semibold"
                                   )}
                                 >
                                   {m}
                                 </span>
-                                {modelNote(m) ? (
-                                  <span className="ms-auto shrink-0 text-xs text-muted-foreground">
-                                    {t(NOTE_LABEL[modelNote(m)!])}
-                                  </span>
-                                ) : fit ? (
-                                  <Badge
-                                    variant={
-                                      fit === "great" ? "default" : "secondary"
-                                    }
-                                    className="ms-auto shrink-0"
-                                  >
-                                    {t(
-                                      fit === "great" ? "fitGreat" : "fitGood"
-                                    )}
-                                  </Badge>
-                                ) : null}
+                                <span className="flex w-28 shrink-0 justify-end">
+                                  {modelNote(m) ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {t(NOTE_LABEL[modelNote(m)!])}
+                                    </span>
+                                  ) : fit ? (
+                                    <Badge
+                                      variant={
+                                        fit === "great"
+                                          ? "default"
+                                          : "secondary"
+                                      }
+                                    >
+                                      {t(
+                                        fit === "great" ? "fitGreat" : "fitGood"
+                                      )}
+                                    </Badge>
+                                  ) : null}
+                                </span>
                               </CommandItem>
                             )
                           })}

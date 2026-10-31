@@ -52,6 +52,14 @@ const STRINGS = {
     "مدل هنوز جواب نداده. سرویس‌های رایگان گاهی شلوغ‌اند؛ کمی صبر کنید.",
     "No answer from the model yet. Free services are sometimes busy; please wait a little.",
   ],
+  slowStartShort: [
+    "مدل هنوز جواب نداده؛ کمی صبر کنید",
+    "No answer yet; please wait",
+  ],
+  slowStreamShort: [
+    "پاسخ کند می‌رسد؛ کمی صبر کنید",
+    "Answering slowly; please wait",
+  ],
   slowStream: [
     "پاسخ مدل کند است و دارد کم‌کم می‌رسد؛ لطفاً صبر کنید.",
     "The model is answering slowly; please wait.",
@@ -198,6 +206,7 @@ const STRINGS = {
   pagePartial: ["نیمه‌کاره", "Partly done"],
   pdfOpening: ["در حال باز کردن فایل", "Opening the file"],
   pdfReading: ["خواندن متن صفحه‌ها", "Reading pages"],
+  pdfTranslatedPages: ["صفحه‌های ترجمه‌شده", "Pages translated"],
   pdfOpenFailed: ["این فایل PDF باز نشد.", "Could not open this PDF."],
   pdfStopped: ["ترجمه‌ی سند متوقف شد", "Stopped translating the document"],
   imageFiles: ["تصویر", "Images"],
